@@ -1,0 +1,9 @@
+{
+  "name": "@ramya-ai/contracts",
+  "version": "1.0.0",
+  "description": "Shared TypeScript and JSON contracts for Ramya AI",
+  "main": "types.ts",
+  "types": "types.ts",
+  "author": "Ramya AI Team",
+  "license": "MIT"
+}

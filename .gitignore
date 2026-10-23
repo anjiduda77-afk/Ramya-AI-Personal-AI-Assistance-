@@ -1,0 +1,53 @@
+# Dependencies
+node_modules/
+__pycache__/
+*.py[cod]
+*$py.class
+*.env
+.env.local
+.venv/
+env/
+venv/
+ENV/
+
+# Distribution & Build
+dist/
+build/
+out/
+*.egg-info/
+*.egg
+target/
+.tauri/
+
+# SQLite & Local Data
+*.sqlite
+*.sqlite3
+*.db
+!data/migrations/*.sql
+storage/uploads/
+storage/vectors/
+storage/recordings/
+storage/screenshots/
+
+# IDE & OS
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Android
+.gradle/
+local.properties
+apps/android/app/build/
+apps/android/.gradle/
+*.apk
+*.aab
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
