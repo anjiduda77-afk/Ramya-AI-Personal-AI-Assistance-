@@ -80,6 +80,41 @@ export interface DeveloperDiagnostics {
   memoryUsageMb: number;
 }
 
+export interface UserProfile {
+  id: string;
+  supabase_user_id?: string | null;
+  email: string;
+  display_name: string;
+  avatar_url?: string | null;
+  provider: string;
+  is_authenticated: boolean;
+  created_at: string;
+  updated_at?: string;
+}
+
+export interface SyncStatus {
+  is_cloud_configured: boolean;
+  pending_count: number;
+  synced_count: number;
+  failed_count: number;
+  last_synced_at?: string | null;
+  mode: 'hybrid' | 'offline_local';
+}
+
+export interface TaskPlan {
+  plan_id: string;
+  goal: string;
+  steps: {
+    step: number;
+    description: string;
+    status: 'pending' | 'completed' | 'failed';
+    output?: string;
+  }[];
+  status: string;
+  message: string;
+  spoken_response: string;
+}
+
 export const api = {
   async getHealth(): Promise<HealthData> {
     const res = await fetch(`${API_BASE}/health`);
@@ -396,6 +431,81 @@ export const api = {
   // Web Search API
   async webSearch(q: string): Promise<any> {
     const res = await fetch(`${API_BASE}/search?q=${encodeURIComponent(q)}`);
+    return res.json();
+  },
+
+  // Authentication & Verified User Profile
+  async getUserProfile(): Promise<{ profile: UserProfile; sync: SyncStatus }> {
+    const res = await fetch(`${API_BASE}/auth/profile`);
+    return res.json();
+  },
+
+  async verifyAuthSession(token: string): Promise<{ success: boolean; profile: UserProfile }> {
+    const res = await fetch(`${API_BASE}/auth/session`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token })
+    });
+    if (!res.ok) throw new Error('Authentication verification failed.');
+    return res.json();
+  },
+
+  async updateUserProfile(displayName?: string, avatarUrl?: string): Promise<{ success: boolean; profile: UserProfile }> {
+    const res = await fetch(`${API_BASE}/auth/profile`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ display_name: displayName, avatar_url: avatarUrl })
+    });
+    return res.json();
+  },
+
+  async enterGuestMode(): Promise<{ success: boolean; profile: UserProfile }> {
+    const res = await fetch(`${API_BASE}/auth/guest`, { method: 'POST' });
+    return res.json();
+  },
+
+  async signOut(): Promise<{ success: boolean; profile: UserProfile }> {
+    const res = await fetch(`${API_BASE}/auth/signout`, { method: 'POST' });
+    return res.json();
+  },
+
+  async deleteAccount(): Promise<{ success: boolean; message: string }> {
+    const res = await fetch(`${API_BASE}/auth/account`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ confirmed: true })
+    });
+    return res.json();
+  },
+
+  // Synchronisation
+  async getSyncStatus(): Promise<SyncStatus> {
+    const res = await fetch(`${API_BASE}/sync/status`);
+    return res.json();
+  },
+
+  async flushSync(token?: string): Promise<any> {
+    const res = await fetch(`${API_BASE}/sync/flush`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token })
+    });
+    return res.json();
+  },
+
+  // Multi-Step Task Planning
+  async executePlan(goal: string, confirmed: boolean = false): Promise<TaskPlan> {
+    const res = await fetch(`${API_BASE}/intelligence/plan`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ goal, confirmed })
+    });
+    return res.json();
+  },
+
+  // Context Awareness
+  async getActiveContext(): Promise<any> {
+    const res = await fetch(`${API_BASE}/intelligence/context`);
     return res.json();
   }
 };

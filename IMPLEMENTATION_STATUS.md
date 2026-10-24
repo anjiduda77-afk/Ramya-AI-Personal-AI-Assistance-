@@ -67,6 +67,22 @@
   - DuckDuckGo & Wikipedia Web Search Integration.
   - Complete 35-test Pytest test suite (100% pass rate).
 
+- [x] **Milestone 11 (Human Intelligence Layer & Supabase Authentication + Sync):**
+  - **Context Awareness:** Multi-turn reference and pronoun resolution ("that one", "continue", "do it again", "what did I learn yesterday", weather follow-ups).
+  - **Persistent Personal Memory:** Local SQLite storage with automatic contradiction and outdated preference resolution, separate from full chat history, with user-controlled inspection, correction, export, and delete.
+  - **Personalised Behaviour:** Response brevity, explanations, and examples adapt to user preferences; no personal facts assumed without verified evidence.
+  - **Intent Recognition & Clarification:** Dispatches accurately across conversation, tools, media, search, and productivity; prompts with concise clarification when queries are ambiguous.
+  - **Multi-Step Task Planning & Execution:** Automatic decomposition of composite tasks into ordered sub-steps; step-by-step verification; confirmation gates before consequential actions (e.g. data deletion).
+  - **Emotional Awareness:** Detection of conversational cues for confusion, frustration, urgency, and excitement; empathetic response shaping without claiming human consciousness or sentience.
+  - **Adaptive English Tutor:** Daily lesson progress, spaced repetition revision check, vocabulary, and mistake tracking.
+  - **Self-Correction:** Distinguishes verified facts from uncertain information; tries safe alternatives when tools encounter issues.
+  - **Hybrid Intelligence:** Seamless offline local model priority with online AI providers; context preserved across providers without frontend leaks.
+  - **Google Sign-In & Supabase Auth:** Polished "Continue with Google" button, OAuth redirect support on Windows and Android (`ai.ramya.assistant://auth/callback`), session persistence, and token refresh.
+  - **User Profile Management:** Dedicated profile screen with avatar, display name editing, email, creation date, sign-out, data export (JSON), and confirmed account deletion.
+  - **Supabase PostgreSQL Database:** Full migrations for `profiles`, `user_preferences`, `conversations`, `messages`, `user_memories`, `analytics_events`, `user_settings` with Row Level Security (RLS) policies.
+  - **Offline & Online Synchronisation:** Local SQLite `sync_outbox` buffers changes during offline operation; safe flush to Supabase on reconnect; conflict resolution via last-write-wins; local user data is NEVER wiped on network loss.
+  - **Automated Test Suite:** 48 passing tests in Pytest covering context, memory contradiction, planning, emotional cues, auth token verification, outbox queueing, and English revision.
+
 ---
 
 ## 3. Verified Command Routing Capabilities
@@ -78,6 +94,11 @@
 | `"Tell my friend in English that I will arrive in ten minutes"` | English Tutor / Telugu Engine | `conversation` | Spoken: *"I'll be there in ten minutes."* |
 | `"Repeat yesterday's English lesson"` | English Learning Tutor | `quiz_learning` | Spoken: *"Yesterday's sentence was: 'Have you eaten?'..."* |
 | `"Remember that I prefer dark cyberpunk mode"` | Personal Memory Engine | `productivity` | Spoken: *"Saved to memory: I prefer dark cyberpunk mode."* |
+| `"Check the weather in Mumbai and also view my tasks"` | Task Planner & Router | `task_planning` | Decomposes into 2 steps, executes sequentially, verifies outputs. |
+| `"What did I learn yesterday?"` | Context Engine | `conversation` | Direct recall of previous day's English sentence and stored facts. |
+| `"Do it again"` (Follow-up) | Context Engine | `live_info` / previous | Automatically repeats previous query using active context. |
+| `"This isn't working why can't you get this right"` | Emotional Engine | Adapted Tone | Empathetic de-escalation without claiming human emotions. |
+| `"Open it"` (Vague) | Context Engine | Clarification | Concise question: *"Which application would you like me to open?"* |
 | `"What theme do I like?"` (Follow-up) | Local Ollama + Gemma 3 4B | `conversation` | Spoken: *"You prefer dark cyberpunk mode, right?"* |
 | `"What is the weather in Hyderabad?"` | Live Data Engine | `live_info` | Spoken: *"Current weather in Hyderabad is 28°C..."* |
 | `"Open YouTube"` | Allowlisted App Launcher | `system_app` | Launches official YouTube client or web fallback |

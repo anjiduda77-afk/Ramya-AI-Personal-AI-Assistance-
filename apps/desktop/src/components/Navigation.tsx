@@ -1,4 +1,5 @@
 import React from 'react';
+import { UserProfile } from '../services/api';
 
 export type NavScreenId =
   | 'command_center'
@@ -8,13 +9,16 @@ export type NavScreenId =
   | 'productivity'
   | 'weather_markets'
   | 'quiz_learning'
-  | 'settings';
+  | 'settings'
+  | 'profile';
 
 interface NavigationProps {
   activeScreen: NavScreenId;
   onSelectScreen: (screen: NavScreenId) => void;
   isFloatingMode: boolean;
   onToggleFloating: () => void;
+  userProfile?: UserProfile | null;
+  onOpenAuth?: () => void;
 }
 
 interface NavItem {
@@ -28,7 +32,9 @@ export const Navigation: React.FC<NavigationProps> = ({
   activeScreen,
   onSelectScreen,
   isFloatingMode,
-  onToggleFloating
+  onToggleFloating,
+  userProfile,
+  onOpenAuth
 }) => {
   const navItems: NavItem[] = [
     { id: 'command_center', label: 'Command Center', icon: '⚡' },
@@ -38,7 +44,8 @@ export const Navigation: React.FC<NavigationProps> = ({
     { id: 'productivity', label: 'Productivity & Focus', icon: '⏱️' },
     { id: 'weather_markets', label: 'Live Radar', icon: '📈' },
     { id: 'quiz_learning', label: 'Learning & Quiz', icon: '🎓' },
-    { id: 'settings', label: 'Preferences & Privacy', icon: '⚙️' }
+    { id: 'settings', label: 'Preferences & Privacy', icon: '⚙️' },
+    { id: 'profile', label: 'User Profile & Sync', icon: '👤' }
   ];
 
   return (

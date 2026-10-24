@@ -3,9 +3,9 @@ import { Navigation, NavScreenId } from './components/Navigation';
 import { SystemTelemetry } from './components/SystemTelemetry';
 import { FloatingOrbWindow } from './components/FloatingOrbWindow';
 import { OrbState, wsService } from './services/websocket';
-import { api, HealthData } from './services/api';
+import { api, HealthData, UserProfile } from './services/api';
 
-// Screens
+// Screens & Modals
 import { CommandCenterScreen } from './screens/CommandCenterScreen';
 import { AiChatScreen } from './screens/AiChatScreen';
 import { ScreenIntelligenceScreen } from './screens/ScreenIntelligenceScreen';
@@ -14,6 +14,8 @@ import { ProductivityScreen } from './screens/ProductivityScreen';
 import { WeatherMarketsScreen } from './screens/WeatherMarketsScreen';
 import { QuizLearningScreen } from './screens/QuizLearningScreen';
 import { SettingsDiagnosticsScreen } from './screens/SettingsDiagnosticsScreen';
+import { ProfileScreen } from './screens/ProfileScreen';
+import { AuthModal } from './components/AuthModal';
 
 export const App: React.FC = () => {
   const [activeScreen, setActiveScreen] = useState<NavScreenId>('command_center');
@@ -21,6 +23,8 @@ export const App: React.FC = () => {
   const [isFloatingMode, setIsFloatingMode] = useState<boolean>(false);
   const [health, setHealth] = useState<HealthData | null>(null);
   const [transcript, setTranscript] = useState<string>('Listening for "Hey Ramya"...');
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
 
   useEffect(() => {
     // 1. Connect WebSocket for live voice events
@@ -31,6 +35,7 @@ export const App: React.FC = () => {
 
     // 2. Fetch Initial Health & Periodic Polling
     fetchHealth();
+    fetchProfile();
     const timer = setInterval(fetchHealth, 15000);
 
     // 3. Global Push-to-Talk Hotkey Listener (Ctrl+Space)
@@ -55,6 +60,15 @@ export const App: React.FC = () => {
       setHealth(h);
     } catch (e) {
       console.warn('Backend connection notice');
+    }
+  };
+
+  const fetchProfile = async () => {
+    try {
+      const res = await api.getUserProfile();
+      setUserProfile(res.profile);
+    } catch (e) {
+      console.warn('Profile load notice');
     }
   };
 
@@ -89,6 +103,8 @@ export const App: React.FC = () => {
         return <QuizLearningScreen />;
       case 'settings':
         return <SettingsDiagnosticsScreen />;
+      case 'profile':
+        return <ProfileScreen onOpenAuthModal={() => setIsAuthModalOpen(true)} />;
       default:
         return <CommandCenterScreen orbState={orbState} setOrbState={setOrbState} onNavigate={setActiveScreen} />;
     }
@@ -119,6 +135,8 @@ export const App: React.FC = () => {
               onSelectScreen={setActiveScreen}
               isFloatingMode={isFloatingMode}
               onToggleFloating={() => setIsFloatingMode(!isFloatingMode)}
+              userProfile={userProfile}
+              onOpenAuth={() => setIsAuthModalOpen(true)}
             />
             <main style={{ flex: 1, height: 'calc(100vh - 45px)', overflow: 'hidden', background: 'var(--bg-primary)' }}>
               {renderActiveScreen()}
@@ -126,6 +144,16 @@ export const App: React.FC = () => {
           </div>
         </>
       )}
+
+      {/* Google Authentication & Guest Mode Modal */}
+      <AuthModal
+        isOpen={isAuthModalOpen}
+        onClose={() => setIsAuthModalOpen(false)}
+        onAuthenticated={(p) => {
+          setUserProfile(p);
+          fetchProfile();
+        }}
+      />
     </div>
   );
 };

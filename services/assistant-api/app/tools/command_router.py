@@ -22,6 +22,9 @@ from app.memory.engine import memory_engine
 from app.tools.english_tutor import english_tutor
 from app.tools.music_player import music_player
 from app.tools.web_search import web_search_engine
+from app.intelligence.context_engine import context_engine
+from app.intelligence.emotional_engine import emotional_engine
+from app.intelligence.planner import planner_engine
 
 logger = logging.getLogger("ramya.tools.router")
 
@@ -58,7 +61,57 @@ class CommandRouter:
                 status="success"
             )
 
-        # 2. Fast Deterministic Matchers
+        # 2. Human Intelligence Layer: Emotional Cues & Contextual Pronoun Resolution
+        detected_emotion = emotional_engine.detect_emotion(clean_q)
+        resolved_q, ref_meta = context_engine.resolve_reference(clean_q)
+
+        # Direct answer from reference resolution (e.g. "what did I learn yesterday")
+        if ref_meta.get("was_resolved") and ref_meta.get("direct_answer"):
+            ans = ref_meta["direct_answer"]
+            return self._build_response(
+                task_id=task_id,
+                query=raw_query,
+                intent="conversation",
+                spoken=ans,
+                message=ans,
+                status="success",
+                emotion=detected_emotion
+            )
+
+        clean_q = resolved_q
+        lower_q = clean_q.lower()
+
+        # 3. Ambiguity & Clarification Check
+        clarification_msg = context_engine.check_ambiguity_and_clarification(clean_q)
+        if clarification_msg:
+            return self._build_response(
+                task_id=task_id,
+                query=raw_query,
+                intent="conversation",
+                spoken=clarification_msg,
+                message=clarification_msg,
+                status="needs_clarification",
+                emotion=detected_emotion
+            )
+
+        # 4. Multi-Step Composite Task Planning
+        if planner_engine.is_composite_task(clean_q):
+            steps = planner_engine.decompose_task(clean_q)
+            plan_id = planner_engine.save_plan(clean_q, steps)
+            plan_res = await planner_engine.execute_plan(plan_id, self, is_confirmed=is_user_confirmed)
+            return self._build_response(
+                task_id=task_id,
+                query=raw_query,
+                intent="task_planning",
+                spoken=plan_res["spoken_response"],
+                message=plan_res["message"],
+                card={"type": "task", "title": "Multi-Step Execution Plan", "data": plan_res},
+                requires_approval=plan_res.get("status") == "needs_approval",
+                approval_prompt=plan_res.get("approval_prompt"),
+                emotion=detected_emotion
+            )
+
+        # 5. Fast Deterministic Matchers
 
         # --- A. Free and Legal Music Playback ---
         if re.search(r"\bplay\s+(?:(?:some\s+)?(relaxing|chill|lofi|ambient|classical|nature|calm|study|focus)\s+)?(music|song|beats?|tracks?)\b", lower_q):
@@ -427,14 +480,28 @@ class CommandRouter:
         card: Optional[Dict[str, Any]] = None,
         sources: Optional[List[Dict[str, Any]]] = None,
         requires_approval: bool = False,
-        approval_prompt: Optional[str] = None
+        approval_prompt: Optional[str] = None,
+        emotion: str = "neutral",
+        entity: Optional[str] = None
     ) -> Dict[str, Any]:
         """Builds clean public response schema without internal secrets or execution traces."""
+        # Adapt tone based on emotional awareness (without claiming consciousness)
+        final_message = message
+        final_spoken = spoken
+        if emotion != "neutral":
+            final_message, final_spoken = emotional_engine.adapt_response(message, spoken, emotion)
+
+        # Update persistent context memory
+        try:
+            context_engine.update_context(query, final_message, intent, entity=entity, emotional_state=emotion)
+        except Exception as e:
+            logger.debug(f"Context update note: {e}")
+
         return {
             # Public standard fields
             "status": status,
-            "message": message,
-            "spoken_response": spoken,
+            "message": final_message,
+            "spoken_response": final_spoken,
             "task_id": task_id,
             "intent": intent,
             "card": card,
@@ -446,8 +513,8 @@ class CommandRouter:
             # Backward compatibility fields for legacy views & tests
             "id": task_id,
             "query": query,
-            "spokenResponse": spoken,
-            "detailedText": message,
+            "spokenResponse": final_spoken,
+            "detailedText": final_message,
             "toolResult": card.get("data") if card else None
         }
 

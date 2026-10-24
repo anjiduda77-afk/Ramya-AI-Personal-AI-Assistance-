@@ -7,6 +7,7 @@ grounded context injection without fabricating unverified memories.
 import re
 import uuid
 import logging
+import json
 from datetime import datetime
 from typing import List, Dict, Any, Optional
 from app.database.db import db
@@ -17,13 +18,60 @@ class MemoryEngine:
     def __init__(self):
         pass
 
+    def _resolve_contradictions(self, conn, new_content: str, category: str) -> List[str]:
+        """
+        Detects and supersedes contradictory or outdated memories.
+        e.g., if old memory is 'User prefers light mode' and new is 'User prefers dark mode',
+        the outdated memory is superseded so facts remain coherent.
+        """
+        superseded_ids = []
+        lower_new = new_content.lower()
+
+        subjects = ["theme", "mode", "color", "car", "city", "live in", "job", "coffee", "tea", "wake word"]
+        detected_subject = None
+        for s in subjects:
+            if s in lower_new:
+                detected_subject = s
+                break
+
+        if detected_subject:
+            existing = conn.execute(
+                """
+                SELECT id, content FROM user_memories
+                WHERE category = ? AND LOWER(content) LIKE ?;
+                """,
+                (category, f"%{detected_subject}%")
+            ).fetchall()
+
+            for old_id, old_content in existing:
+                if old_content.strip().lower() != lower_new:
+                    conn.execute("DELETE FROM user_memories WHERE id = ?;", (old_id,))
+                    superseded_ids.append(old_id)
+                    logger.info(f"Superseded contradictory memory [{old_id}]: '{old_content}' -> '{new_content}'")
+
+        return superseded_ids
+
+    def _queue_sync(self, table_name: str, record_id: str, action: str, payload: Dict[str, Any]):
+        """Queues change into offline sync_outbox for Supabase synchronization."""
+        try:
+            with db.get_connection() as conn:
+                conn.execute(
+                    """
+                    INSERT INTO sync_outbox (id, table_name, record_id, action, payload, status)
+                    VALUES (?, ?, ?, ?, ?, 'pending');
+                    """,
+                    (f"sync-{uuid.uuid4().hex[:10]}", table_name, record_id, action, json.dumps(payload))
+                )
+        except Exception as e:
+            logger.debug(f"Sync outbox write note: {e}")
+
     def save_memory(
         self,
         content: str,
         category: str = "general",
         importance: int = 3
     ) -> Dict[str, Any]:
-        """Saves a new memory entry."""
+        """Saves a new memory entry with contradiction resolution."""
         clean_content = content.strip()
         if not clean_content:
             raise ValueError("Memory content cannot be empty.")
@@ -35,6 +83,7 @@ class MemoryEngine:
         now = datetime.now().isoformat()
 
         with db.get_connection() as conn:
+            superseded = self._resolve_contradictions(conn, clean_content, cat)
             conn.execute(
                 """
                 INSERT INTO user_memories (id, category, content, importance, created_at, updated_at)
@@ -43,15 +92,18 @@ class MemoryEngine:
                 (memory_id, cat, clean_content, imp, now, now)
             )
 
-        logger.info(f"Saved memory [{memory_id}] category={cat}")
-        return {
+        entry = {
             "id": memory_id,
             "category": cat,
             "content": clean_content,
             "importance": imp,
+            "superseded_ids": superseded,
             "created_at": now,
             "updated_at": now
         }
+        self._queue_sync("user_memories", memory_id, "upsert", entry)
+        logger.info(f"Saved memory [{memory_id}] category={cat}")
+        return entry
 
     def list_memories(
         self,
@@ -168,13 +220,23 @@ class MemoryEngine:
                 """,
                 (clean_content, cat, imp, now, memory_id)
             )
+        self._queue_sync("user_memories", memory_id, "upsert", {
+            "id": memory_id,
+            "category": cat,
+            "content": clean_content,
+            "importance": imp,
+            "updated_at": now
+        })
         return True
 
     def delete_memory(self, memory_id: str) -> bool:
         """Deletes a memory by ID."""
         with db.get_connection() as conn:
             cursor = conn.execute("DELETE FROM user_memories WHERE id = ?;", (memory_id,))
-            return cursor.rowcount > 0
+            success = cursor.rowcount > 0
+        if success:
+            self._queue_sync("user_memories", memory_id, "delete", {"id": memory_id})
+        return success
 
     def clear_all_memories(self) -> int:
         """Deletes all user memories (privacy action)."""

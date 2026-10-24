@@ -29,6 +29,10 @@ from app.memory.engine import memory_engine
 from app.tools.english_tutor import english_tutor
 from app.tools.music_player import music_player
 from app.tools.web_search import web_search_engine
+from app.auth.supabase_auth import auth_manager
+from app.sync.engine import sync_engine
+from app.intelligence.context_engine import context_engine
+from app.intelligence.planner import planner_engine
 
 logger = logging.getLogger("ramya.api.routes")
 api_router = APIRouter()
@@ -463,4 +467,99 @@ async def launch_music_app(payload: Dict[str, str]):
 async def web_search(q: str = Query(..., min_length=1)):
     """Executes free, legal web search via DuckDuckGo and Wikipedia."""
     return await web_search_engine.search(q)
+
+# --- 16. AUTHENTICATION & VERIFIED USER PROFILE ---
+@api_router.post("/auth/session")
+async def verify_auth_session(payload: Dict[str, str]):
+    """
+    Verifies Supabase access token and caches verified profile.
+    Never trusts profile details supplied by unauthenticated client.
+    """
+    token = payload.get("token", "").strip()
+    if not token:
+        raise HTTPException(status_code=400, detail="Authentication token required.")
+    
+    verified = await auth_manager.verify_token(token)
+    if not verified:
+        raise HTTPException(status_code=401, detail="Invalid or expired authentication session.")
+    
+    return {"success": True, "profile": verified}
+
+@api_router.get("/auth/profile")
+async def get_user_profile():
+    """Returns verified user profile or active guest session."""
+    profile = auth_manager.get_current_profile()
+    sync_status = sync_engine.get_sync_status()
+    return {
+        "profile": profile,
+        "sync": sync_status
+    }
+
+@api_router.put("/auth/profile")
+async def update_user_profile(payload: Dict[str, Optional[str]]):
+    """Updates editable user profile fields."""
+    display_name = payload.get("display_name")
+    avatar_url = payload.get("avatar_url")
+    updated = auth_manager.update_profile(display_name=display_name, avatar_url=avatar_url)
+    return {"success": True, "profile": updated}
+
+@api_router.post("/auth/guest")
+async def enter_guest_mode():
+    """Activates local offline guest mode without wiping existing memories."""
+    guest_profile = auth_manager.set_guest_mode()
+    return {"success": True, "profile": guest_profile, "message": "Guest session active."}
+
+@api_router.post("/auth/signout")
+async def sign_out_user():
+    """Signs out user and clears local auth credentials without deleting data."""
+    profile = auth_manager.sign_out()
+    return {"success": True, "profile": profile, "message": "Signed out successfully."}
+
+@api_router.delete("/auth/account")
+async def delete_user_account(payload: Dict[str, bool]):
+    """Deletes local user profile and purges private database tables upon confirmed request."""
+    if not payload.get("confirmed", False):
+        raise HTTPException(status_code=400, detail="Account deletion requires explicit confirmation.")
+    
+    with db.get_connection() as conn:
+        conn.execute("DELETE FROM user_profiles WHERE id='local_user';")
+        conn.execute("DELETE FROM user_memories;")
+        conn.execute("DELETE FROM messages;")
+        conn.execute("DELETE FROM conversations;")
+        conn.execute("DELETE FROM english_learning_records;")
+        conn.execute("DELETE FROM sync_outbox;")
+    
+    guest_profile = auth_manager.set_guest_mode()
+    return {"success": True, "message": "Account and associated data deleted.", "profile": guest_profile}
+
+# --- 17. OFFLINE & ONLINE SYNCHRONISATION ---
+@api_router.get("/sync/status")
+async def get_sync_status():
+    """Returns outbox queue status and cloud connectivity."""
+    return sync_engine.get_sync_status()
+
+@api_router.post("/sync/flush")
+async def flush_sync_queue(payload: Optional[Dict[str, str]] = None):
+    """Flushes local SQLite outbox queue to Supabase."""
+    token = payload.get("token") if payload else None
+    return await sync_engine.flush_outbox(jwt_token=token)
+
+# --- 18. CONTEXT & TASK PLANNING INTELLIGENCE ---
+@api_router.get("/intelligence/context")
+async def get_active_context(session_id: str = "current"):
+    """Returns active conversation context and resolved state."""
+    return context_engine.get_context(session_id=session_id)
+
+@api_router.post("/intelligence/plan")
+async def create_and_execute_plan(payload: Dict[str, Any]):
+    """Decomposes a composite user command into verified steps and executes it."""
+    goal = payload.get("goal", "").strip()
+    if not goal:
+        raise HTTPException(status_code=400, detail="Goal query required.")
+    
+    is_confirmed = payload.get("confirmed", False)
+    steps = planner_engine.decompose_task(goal)
+    plan_id = planner_engine.save_plan(goal, steps)
+    result = await planner_engine.execute_plan(plan_id, command_router, is_confirmed=is_confirmed)
+    return result
 

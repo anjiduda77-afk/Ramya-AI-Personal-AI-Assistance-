@@ -304,3 +304,43 @@ export interface WebSearchResult {
   spoken_response?: string;
 }
 
+// 15. User Authentication & Profile
+export interface UserProfile {
+  id: string;
+  supabase_user_id?: string | null;
+  email: string;
+  display_name: string;
+  avatar_url?: string | null;
+  provider: 'google' | 'guest' | string;
+  is_authenticated: boolean;
+  created_at: string;
+  updated_at?: string;
+}
+
+// 16. Offline & Online Synchronisation Status
+export interface SyncStatus {
+  is_cloud_configured: boolean;
+  pending_count: number;
+  synced_count: number;
+  failed_count: number;
+  last_synced_at?: string | null;
+  mode: 'hybrid' | 'offline_local';
+}
+
+// 17. Multi-Step Task Plan
+export interface TaskPlanStep {
+  step: number;
+  description: string;
+  status: 'pending' | 'completed' | 'failed';
+  output?: string;
+}
+
+export interface TaskPlan {
+  plan_id: string;
+  goal: string;
+  steps: TaskPlanStep[];
+  status: string;
+  message: string;
+  spoken_response: string;
+}
+

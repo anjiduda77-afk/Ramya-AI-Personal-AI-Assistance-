@@ -65,6 +65,12 @@ class Settings:
     OPENAI_MODEL: str = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
     XAI_API_KEY: str = os.getenv("XAI_API_KEY", "")
     XAI_MODEL: str = os.getenv("XAI_MODEL", "grok-beta")
+
+    # Supabase Cloud Database & Auth Configuration
+    SUPABASE_URL: str = os.getenv("SUPABASE_URL", "")
+    SUPABASE_ANON_KEY: str = os.getenv("SUPABASE_ANON_KEY", "")
+    SUPABASE_SERVICE_ROLE_KEY: str = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
+    GOOGLE_CLIENT_ID: str = os.getenv("GOOGLE_CLIENT_ID", "")
     
     # Voice Settings
     LANGUAGE: str = os.getenv("RAMYA_LANGUAGE", "en-IN")
