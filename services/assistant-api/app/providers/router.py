@@ -18,6 +18,7 @@ class ModelRouter:
     def __init__(self):
         self.ollama = OllamaProvider()
         self.gemini = CloudAIProvider(provider_type="gemini", api_key=settings.GEMINI_API_KEY or settings.CLOUD_API_KEY, model=settings.GEMINI_MODEL or settings.CLOUD_MODEL)
+        self.openrouter = CloudAIProvider(provider_type="openrouter", api_key=settings.OPENROUTER_API_KEY, model=settings.OPENROUTER_MODEL)
         self.openai = CloudAIProvider(provider_type="openai", api_key=settings.OPENAI_API_KEY, model=settings.OPENAI_MODEL)
         self.xai = CloudAIProvider(provider_type="xai", api_key=settings.XAI_API_KEY, model=settings.XAI_MODEL)
         self.cloud = self.gemini # default cloud handle
@@ -27,6 +28,8 @@ class ModelRouter:
         providers = []
         if self.gemini.api_key and await self.gemini.is_available():
             providers.append(("gemini", self.gemini))
+        if self.openrouter.api_key and await self.openrouter.is_available():
+            providers.append(("openrouter", self.openrouter))
         if self.openai.api_key and await self.openai.is_available():
             providers.append(("openai", self.openai))
         if self.xai.api_key and await self.xai.is_available():

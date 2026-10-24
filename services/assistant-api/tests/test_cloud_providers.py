@@ -18,9 +18,14 @@ def test_cloud_provider_adapters():
     assert openai.model == "gpt-4o-mini"
 
     # 3. Google Gemini provider adapter
-    gemini = CloudAIProvider(provider_type="gemini", api_key="test-key-gemini", model="gemini-1.5-flash")
+    gemini = CloudAIProvider(provider_type="gemini", api_key="test-key-gemini", model="gemini-3-flash-preview")
     assert gemini.provider_name == "cloud-gemini"
-    assert gemini.model == "gemini-1.5-flash"
+    assert gemini.model == "gemini-3-flash-preview"
+
+    # 4. OpenRouter provider adapter
+    openrouter = CloudAIProvider(provider_type="openrouter", api_key="test-key-or", model="nvidia/nemotron-3.5-lightning:free")
+    assert openrouter.provider_name == "cloud-openrouter"
+    assert openrouter.model == "nvidia/nemotron-3.5-lightning:free"
 
 @pytest.mark.asyncio
 async def test_router_provider_selection():

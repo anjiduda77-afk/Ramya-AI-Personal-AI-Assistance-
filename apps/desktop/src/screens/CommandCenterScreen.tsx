@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { AiOrb } from '../components/AiOrb';
 import { OrbState, wsService } from '../services/websocket';
-import { api, AssistantResponse } from '../services/api';
+import { api, AssistantResponse, VoiceSettings } from '../services/api';
+import { audioPlayer } from '../services/audioPlayer';
 
 interface CommandCenterScreenProps {
   orbState: OrbState;
@@ -20,7 +21,15 @@ export const CommandCenterScreen: React.FC<CommandCenterScreenProps> = ({
   const [tasksSnapshot, setTasksSnapshot] = useState<any[]>([]);
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [customInput, setCustomInput] = useState<string>('');
-  const [currentAudio, setCurrentAudio] = useState<HTMLAudioElement | null>(null);
+  const [interimTranscript, setInterimTranscript] = useState<string>('');
+
+  // Continuous Conversation & Audio Pipeline References
+  const activeRecognitionRef = useRef<any>(null);
+  const silenceTimerRef = useRef<any>(null);
+  const followUpTimerRef = useRef<any>(null);
+  const isEchoSuppressedRef = useRef<boolean>(false);
+  const isListeningActiveRef = useRef<boolean>(false);
+  const accumulatedSpeechRef = useRef<string>('');
 
   // Upgrade state: English Tutor, Music, and Personal Memory
   const [englishSession, setEnglishSession] = useState<any>(null);
@@ -30,19 +39,34 @@ export const CommandCenterScreen: React.FC<CommandCenterScreenProps> = ({
   const [musicAudio, setMusicAudio] = useState<HTMLAudioElement | null>(null);
   const [memoriesList, setMemoriesList] = useState<any[]>([]);
   const [newMemoryText, setNewMemoryText] = useState<string>('');
+  const [voiceSettings, setVoiceSettings] = useState<VoiceSettings>({
+    voice_responses_enabled: true,
+    preferred_voice: 'en-IN-NeerjaNeural',
+    speech_speed: '+0%',
+    auto_listen_after_reply: true,
+    wake_word_listening: true,
+    continuous_listening: true,
+    speech_recognition_lang: 'en-IN',
+    silence_threshold_ms: 850
+  });
 
   useEffect(() => {
     loadDashboardData();
+    return () => {
+      stopRecognitionEngine();
+      audioPlayer.stop();
+    };
   }, []);
 
   const loadDashboardData = async () => {
     try {
-      const [w, t, eng, ms, mems] = await Promise.all([
+      const [w, t, eng, ms, mems, vs] = await Promise.all([
         api.getWeather('Hyderabad').catch(() => null),
         api.getTasks(false).catch(() => []),
         api.getEnglishSession().catch(() => null),
         api.getMusicStreams().catch(() => []),
-        api.getMemories().catch(() => [])
+        api.getMemories().catch(() => []),
+        api.getVoiceSettings().catch(() => null)
       ]);
       if (w) setWeatherData(w);
       if (t) setTasksSnapshot(t.slice(0, 3));
@@ -52,21 +76,169 @@ export const CommandCenterScreen: React.FC<CommandCenterScreenProps> = ({
         setActiveMusicTrack(ms[0]);
       }
       if (mems) setMemoriesList(mems.slice(0, 4));
+      if (vs) setVoiceSettings(vs);
     } catch (e) {
       console.warn('Dashboard data refresh');
     }
   };
 
-  const handleStop = () => {
-    if (currentAudio) {
-      currentAudio.pause();
-      setCurrentAudio(null);
+  const isExitPhrase = (text: string): boolean => {
+    const t = text.trim().toLowerCase();
+    return /^(?:stop|bye|goodbye|cancel|nevermind|nothing|thank\s*you|thanks|that'?s\s*all|exit|close)(?:\s+(?:ramya|for\s+now|so\s+much))?[!\.]*$/i.test(t);
+  };
+
+  const stopRecognitionEngine = () => {
+    if (silenceTimerRef.current) {
+      clearTimeout(silenceTimerRef.current);
+      silenceTimerRef.current = null;
     }
+    if (followUpTimerRef.current) {
+      clearTimeout(followUpTimerRef.current);
+      followUpTimerRef.current = null;
+    }
+    if (activeRecognitionRef.current) {
+      try {
+        activeRecognitionRef.current.abort();
+      } catch {}
+      activeRecognitionRef.current = null;
+    }
+    isListeningActiveRef.current = false;
+    setInterimTranscript('');
+    accumulatedSpeechRef.current = '';
+  };
+
+  const startListening = (mode: 'initial' | 'follow_up' = 'initial') => {
+    if (isEchoSuppressedRef.current) return;
+    stopRecognitionEngine();
+
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      setStatusMessage("Speech recognition not supported in this browser environment.");
+      setOrbState('ready');
+      return;
+    }
+
+    try {
+      const recognition = new SpeechRecognition();
+      recognition.lang = voiceSettings.speech_recognition_lang || 'en-IN';
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.maxAlternatives = 1;
+
+      isListeningActiveRef.current = true;
+      activeRecognitionRef.current = recognition;
+
+      if (mode === 'follow_up') {
+        setOrbState('follow_up');
+        setStatusMessage('Listening for follow-up... (or say "that\'s all")');
+
+        // Set 7.5s silence follow-up window
+        followUpTimerRef.current = setTimeout(() => {
+          if (isListeningActiveRef.current) {
+            stopRecognitionEngine();
+            setOrbState('ready');
+            setStatusMessage('Ready for your command');
+          }
+        }, 7500);
+      } else {
+        setOrbState('listening');
+        setStatusMessage('Listening... Speak your command or question.');
+      }
+
+      recognition.onresult = (event: any) => {
+        if (isEchoSuppressedRef.current) return; // Acoustic feedback suppression
+
+        let currentInterim = '';
+        let currentFinal = '';
+
+        for (let i = event.resultIndex; i < event.results.length; ++i) {
+          const transcript = event.results[i][0].transcript;
+          if (event.results[i].isFinal) {
+            currentFinal += transcript + ' ';
+          } else {
+            currentInterim += transcript;
+          }
+        }
+
+        const activeHeard = (accumulatedSpeechRef.current + currentFinal + currentInterim).trim();
+        if (activeHeard) {
+          setInterimTranscript(currentInterim.trim() || activeHeard);
+          setStatusMessage(`"${activeHeard}"`);
+
+          // Reset follow-up timer on detected speech
+          if (followUpTimerRef.current) {
+            clearTimeout(followUpTimerRef.current);
+            followUpTimerRef.current = null;
+          }
+
+          // Instant exit word detection
+          if (isExitPhrase(activeHeard)) {
+            stopRecognitionEngine();
+            handleExecuteCommand(activeHeard);
+            return;
+          }
+
+          // Voice Activity Detection / End-of-Speech silence debounce
+          if (silenceTimerRef.current) {
+            clearTimeout(silenceTimerRef.current);
+          }
+
+          const silenceThreshold = voiceSettings.silence_threshold_ms || 850;
+          silenceTimerRef.current = setTimeout(() => {
+            const finalCommand = activeHeard;
+            stopRecognitionEngine();
+            if (finalCommand) {
+              handleExecuteCommand(finalCommand);
+            } else {
+              setOrbState('ready');
+              setStatusMessage('Ready');
+            }
+          }, silenceThreshold);
+        }
+      };
+
+      recognition.onerror = (event: any) => {
+        if (event.error === 'no-speech') {
+          if (mode !== 'follow_up') {
+            stopRecognitionEngine();
+            setOrbState('ready');
+            setStatusMessage("I didn't catch that. Ready for your command.");
+          }
+        } else if (event.error === 'not-allowed') {
+          stopRecognitionEngine();
+          setOrbState('needs_attention');
+          setStatusMessage("Microphone access is required for voice commands.");
+        } else if (event.error !== 'aborted') {
+          stopRecognitionEngine();
+          setOrbState('ready');
+          setStatusMessage("Ready for your command");
+        }
+      };
+
+      recognition.onend = () => {
+        if (isListeningActiveRef.current && !isEchoSuppressedRef.current) {
+          try {
+            recognition.start();
+          } catch {}
+        }
+      };
+
+      recognition.start();
+    } catch {
+      setOrbState('ready');
+      setStatusMessage("Could not initialize microphone.");
+    }
+  };
+
+  const handleStop = () => {
+    audioPlayer.stop();
     if (musicAudio) {
       musicAudio.pause();
       setIsAudioPlaying(false);
     }
     wsService.cancel();
+    stopRecognitionEngine();
+    isEchoSuppressedRef.current = false;
     setOrbState('ready');
     setStatusMessage('Ready for your command');
     setIsProcessing(false);
@@ -74,15 +246,21 @@ export const CommandCenterScreen: React.FC<CommandCenterScreenProps> = ({
 
   const handleExecuteCommand = async (commandText: string, isConfirmed: boolean = false) => {
     if (!commandText.trim()) return;
+
+    // Anti-feedback echo suppression: mute recognition during execution & speech playback
+    isEchoSuppressedRef.current = true;
+    stopRecognitionEngine();
+
     setIsProcessing(true);
     setOrbState('working');
     setStatusMessage('Working on your request...');
 
     try {
-      const res = await api.sendChat(commandText, 'keyboard', isConfirmed);
+      const res = await api.sendChat(commandText, 'voice', isConfirmed);
       setLastResponse(res);
 
       if (res.requires_approval) {
+        isEchoSuppressedRef.current = false;
         setOrbState('waiting_approval');
         setStatusMessage(res.approval_prompt || 'Waiting for your approval...');
         setIsProcessing(false);
@@ -92,43 +270,82 @@ export const CommandCenterScreen: React.FC<CommandCenterScreenProps> = ({
       setOrbState('speaking');
       setStatusMessage(res.spoken_response || res.message || 'Completed.');
 
-      // Synthesize audio
-      if (res.spoken_response) {
-        const audioRes = await api.synthesizeVoice(res.spoken_response);
-        if (audioRes.success && audioRes.url) {
-          const audio = new Audio(`http://127.0.0.1:8000${audioRes.url}`);
-          setCurrentAudio(audio);
-          audio.onended = () => {
-            setOrbState('ready');
-            setStatusMessage('Ready');
-            setCurrentAudio(null);
-          };
-          audio.onerror = () => {
-            setOrbState('ready');
-            setStatusMessage('Ready');
-            setCurrentAudio(null);
-          };
-          audio.play().catch(() => {
-            setOrbState('ready');
-            setStatusMessage('Ready');
-            setCurrentAudio(null);
-          });
-        } else {
-          setTimeout(() => {
-            setOrbState('ready');
-            setStatusMessage('Ready');
-          }, 2000);
-        }
-      } else {
-        setTimeout(() => {
+      const spokenText = res.spoken_response || res.spokenResponse;
+      const isExit = res.intent === 'exit_conversation' || isExitPhrase(commandText);
+
+      // Synthesize and play audio response if voice responses are enabled
+      if (voiceSettings.voice_responses_enabled && spokenText) {
+        try {
+          const audioRes = await api.synthesizeVoice(
+            spokenText,
+            voiceSettings.preferred_voice,
+            voiceSettings.speech_speed
+          );
+
+          if (audioRes.success && audioRes.url) {
+            const fullUrl = `http://127.0.0.1:8000${audioRes.url}`;
+            audioPlayer.playSpeech(
+              fullUrl,
+              spokenText,
+              () => {
+                // Speech playback ended cleanly
+                isEchoSuppressedRef.current = false;
+                if (isExit) {
+                  setOrbState('ready');
+                  setStatusMessage('Ready for your command');
+                } else if (voiceSettings.continuous_listening !== false) {
+                  // Seamless persistent turn-taking
+                  startListening('follow_up');
+                } else {
+                  setOrbState('ready');
+                  setStatusMessage('Ready');
+                }
+              },
+              () => {
+                isEchoSuppressedRef.current = false;
+                setOrbState('ready');
+                setStatusMessage('Ready');
+              }
+            );
+          } else {
+            // Audio synthesis fallback delay
+            isEchoSuppressedRef.current = false;
+            setTimeout(() => {
+              if (isExit) {
+                setOrbState('ready');
+                setStatusMessage('Ready for your command');
+              } else if (voiceSettings.continuous_listening !== false) {
+                startListening('follow_up');
+              } else {
+                setOrbState('ready');
+                setStatusMessage('Ready');
+              }
+            }, 1400);
+          }
+        } catch {
+          isEchoSuppressedRef.current = false;
           setOrbState('ready');
           setStatusMessage('Ready');
-        }, 1500);
+        }
+      } else {
+        isEchoSuppressedRef.current = false;
+        setTimeout(() => {
+          if (isExit) {
+            setOrbState('ready');
+            setStatusMessage('Ready for your command');
+          } else if (voiceSettings.continuous_listening !== false) {
+            startListening('follow_up');
+          } else {
+            setOrbState('ready');
+            setStatusMessage('Ready');
+          }
+        }, 1000);
       }
 
       // Refresh background widgets
       loadDashboardData();
     } catch (e: any) {
+      isEchoSuppressedRef.current = false;
       setOrbState('needs_attention');
       setStatusMessage("I couldn't complete that request. Please try again.");
     } finally {
@@ -137,33 +354,29 @@ export const CommandCenterScreen: React.FC<CommandCenterScreenProps> = ({
   };
 
   const handleOrbClick = () => {
+    // Speech Barge-in: clicking while speaking immediately interrupts TTS and begins listening!
     if (orbState === 'speaking' || isProcessing) {
-      handleStop();
+      audioPlayer.stop();
+      isEchoSuppressedRef.current = false;
+      setIsProcessing(false);
+      startListening('initial');
       return;
     }
 
-    setOrbState('listening');
-    setStatusMessage('Listening... Speak your command or question.');
-
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (SpeechRecognition) {
-      const recognition = new SpeechRecognition();
-      recognition.lang = 'en-IN';
-      recognition.interimResults = false;
-      recognition.onresult = (event: any) => {
-        const transcript = event.results[0][0].transcript;
-        setStatusMessage(`"${transcript}"`);
-        setOrbState('understanding');
-        handleExecuteCommand(transcript);
-      };
-      recognition.onerror = () => {
-        setOrbState('ready');
-        setStatusMessage("I couldn't hear that clearly. Please try again.");
-      };
-      recognition.start();
-    } else {
-      handleExecuteCommand("What is my plan for today?");
+    if (orbState === 'listening' || orbState === 'follow_up') {
+      stopRecognitionEngine();
+      setOrbState('ready');
+      setStatusMessage('Ready for your command');
+      return;
     }
+
+    if (orbState === 'paused') {
+      startListening('initial');
+      return;
+    }
+
+    // IDLE / ready
+    startListening('initial');
   };
 
   // Music stream toggling
@@ -269,6 +482,24 @@ export const CommandCenterScreen: React.FC<CommandCenterScreenProps> = ({
         <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
           <button
             className="cyber-btn"
+            style={{
+              borderColor: orbState === 'paused' ? 'var(--neon-amber)' : 'rgba(0, 240, 255, 0.4)',
+              background: orbState === 'paused' ? 'rgba(255, 170, 0, 0.15)' : undefined
+            }}
+            onClick={() => {
+              if (orbState === 'paused') {
+                startListening('initial');
+              } else {
+                stopRecognitionEngine();
+                setOrbState('paused');
+                setStatusMessage('Microphone paused. Click orb or Resume to activate.');
+              }
+            }}
+          >
+            <span>{orbState === 'paused' ? '▶️' : '⏸️'}</span> {orbState === 'paused' ? 'RESUME MIC' : 'PAUSE MIC'}
+          </button>
+          <button
+            className="cyber-btn"
             onClick={() => handleExecuteCommand('Repeat yesterday’s English lesson')}
           >
             <span>📚</span> REPEAT ENGLISH LESSON
@@ -322,6 +553,66 @@ export const CommandCenterScreen: React.FC<CommandCenterScreenProps> = ({
         }}>
           {statusMessage}
         </div>
+
+        {/* Interim Real-time Speech Preview */}
+        {interimTranscript && (
+          <div style={{
+            marginTop: '10px',
+            padding: '6px 20px',
+            background: 'rgba(0, 240, 255, 0.08)',
+            border: '1px dashed var(--neon-cyan)',
+            borderRadius: '16px',
+            color: 'var(--neon-cyan)',
+            fontSize: '0.86rem',
+            fontStyle: 'italic',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '8px'
+          }}>
+            <span>🎙️</span>
+            <span>Hearing: "{interimTranscript}"</span>
+          </div>
+        )}
+
+        {/* Persistent Conversation Follow-Up Badge */}
+        {orbState === 'follow_up' && (
+          <div style={{
+            marginTop: '10px',
+            padding: '5px 18px',
+            background: 'rgba(255, 170, 0, 0.12)',
+            border: '1px solid var(--neon-amber)',
+            borderRadius: '16px',
+            color: 'var(--neon-amber)',
+            fontSize: '0.82rem',
+            fontWeight: 600,
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '8px'
+          }}>
+            <span style={{ display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%', background: 'var(--neon-amber)' }}></span>
+            <span>Continuous Follow-Up Active — Speak naturally or say "that's all"</span>
+          </div>
+        )}
+
+        {/* Microphone Paused Badge */}
+        {orbState === 'paused' && (
+          <div style={{
+            marginTop: '10px',
+            padding: '5px 18px',
+            background: 'rgba(255, 51, 102, 0.12)',
+            border: '1px solid var(--neon-red)',
+            borderRadius: '16px',
+            color: 'var(--neon-red)',
+            fontSize: '0.82rem',
+            fontWeight: 600,
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '8px'
+          }}>
+            <span>⏸️</span>
+            <span>Microphone Paused — Click orb or "RESUME MIC" to talk</span>
+          </div>
+        )}
 
         {/* Confirmation Approval Gate */}
         {lastResponse?.requires_approval && (

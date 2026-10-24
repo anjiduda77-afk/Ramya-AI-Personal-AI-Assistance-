@@ -4,6 +4,9 @@ import { UserProfile } from '../services/api';
 export type NavScreenId =
   | 'command_center'
   | 'ai_chat'
+  | 'voice_lab'
+  | 'search_tracking'
+  | 'security'
   | 'screen_intel'
   | 'document_reader'
   | 'productivity'
@@ -39,6 +42,9 @@ export const Navigation: React.FC<NavigationProps> = ({
   const navItems: NavItem[] = [
     { id: 'command_center', label: 'Command Center', icon: '⚡' },
     { id: 'ai_chat', label: 'Voice & Chat', icon: '💬' },
+    { id: 'search_tracking', label: 'Search & Tracking', icon: '🔍' },
+    { id: 'security', label: 'Security & Policy', icon: '🛡️' },
+    { id: 'voice_lab', label: 'Voice Lab & Audio', icon: '🎙️' },
     { id: 'screen_intel', label: 'Vision & Screen', icon: '👁️' },
     { id: 'document_reader', label: 'Document Studio', icon: '📄' },
     { id: 'productivity', label: 'Productivity & Focus', icon: '⏱️' },

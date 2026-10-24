@@ -24,6 +24,7 @@ from app.tools.documents import document_parser
 from app.rag.vector_store import vector_store
 from app.rag.engine import rag_engine
 from app.voice.tts import tts_engine
+from app.voice.stt import stt_engine
 from app.security.permissions import permissions, PermissionTier
 from app.memory.engine import memory_engine
 from app.tools.english_tutor import english_tutor
@@ -33,6 +34,10 @@ from app.auth.supabase_auth import auth_manager
 from app.sync.engine import sync_engine
 from app.intelligence.context_engine import context_engine
 from app.intelligence.planner import planner_engine
+from app.tools.registry import central_registry
+from app.security.capability_registry import capability_registry
+from app.search.unified_search import unified_search_engine
+from app.tracking.engine import tracking_engine
 
 logger = logging.getLogger("ramya.api.routes")
 api_router = APIRouter()
@@ -114,17 +119,79 @@ async def process_chat(payload: Dict[str, Any]):
 # --- 3. VOICE TTS & AUDIO ---
 @api_router.post("/voice/synthesize")
 async def synthesize_voice(payload: Dict[str, Any]):
-    """Generates natural voice audio for given text."""
+    """Generates natural voice audio for given text with multi-tier fallback (Edge-TTS -> pyttsx3 offline -> Chime)."""
     text = payload.get("text", "").strip()
     if not text:
         raise HTTPException(status_code=400, detail="Text cannot be empty.")
     voice = payload.get("voice", settings.VOICE_NAME)
+    rate = payload.get("rate", "+0%")
+    force_offline = payload.get("force_offline", False)
     try:
-        res = await tts_engine.synthesize(text, voice)
+        res = await tts_engine.synthesize(text, voice=voice, rate=rate, force_offline=force_offline)
         return res
     except Exception as e:
         logger.error(f"Voice synthesis error: {e}")
         return {"success": False, "message": "Voice synthesis temporarily unavailable."}
+
+@api_router.get("/voice/settings")
+async def get_voice_settings():
+    """Returns persistent voice settings for speech output, wake-word, and speed."""
+    defaults = {
+        "voice_responses_enabled": "true",
+        "preferred_voice": settings.VOICE_NAME,
+        "speech_speed": "+0%",
+        "auto_listen_after_reply": "true",
+        "wake_word_listening": "true",
+        "continuous_listening": "true",
+        "speech_recognition_lang": "en-IN",
+        "silence_threshold_ms": "800"
+    }
+    with db.get_connection() as conn:
+        rows = conn.execute("SELECT key, value FROM settings WHERE key LIKE 'voice_%' OR key IN ('auto_listen_after_reply', 'wake_word_listening', 'preferred_voice', 'speech_speed', 'continuous_listening', 'speech_recognition_lang', 'silence_threshold_ms');").fetchall()
+        for r in rows:
+            defaults[r["key"]] = r["value"]
+    return {
+        "voice_responses_enabled": defaults.get("voice_responses_enabled", "true").lower() == "true",
+        "preferred_voice": defaults.get("preferred_voice", settings.VOICE_NAME),
+        "speech_speed": defaults.get("speech_speed", "+0%"),
+        "auto_listen_after_reply": defaults.get("auto_listen_after_reply", "true").lower() == "true",
+        "wake_word_listening": defaults.get("wake_word_listening", "true").lower() == "true",
+        "continuous_listening": defaults.get("continuous_listening", "true").lower() == "true",
+        "speech_recognition_lang": defaults.get("speech_recognition_lang", "en-IN"),
+        "silence_threshold_ms": int(defaults.get("silence_threshold_ms", "800"))
+    }
+
+@api_router.post("/voice/settings")
+async def update_voice_settings(payload: Dict[str, Any]):
+    """Saves user voice settings persistently into SQLite."""
+    with db.get_connection() as conn:
+        for k, v in payload.items():
+            str_val = str(v).lower() if isinstance(v, bool) else str(v)
+            conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?);", (k, str_val))
+    return {"success": True, "message": "Voice settings saved."}
+
+@api_router.post("/voice/transcribe")
+async def transcribe_audio_file(
+    file: UploadFile = File(...),
+    language: str = Query(default="en")
+):
+    """Transcribes an uploaded audio file using offline Faster-Whisper."""
+    import uuid
+    upload_dir = settings.STORAGE_DIR / "uploads"
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    temp_path = upload_dir / f"stt_{uuid.uuid4().hex[:8]}_{file.filename}"
+    try:
+        contents = await file.read()
+        with open(temp_path, "wb") as f:
+            f.write(contents)
+        result = stt_engine.transcribe_audio_file(str(temp_path), language=language)
+        return result
+    finally:
+        if temp_path.exists():
+            try:
+                temp_path.unlink()
+            except Exception:
+                pass
 
 @api_router.get("/voice/audio/{filename}")
 async def serve_audio(filename: str):
@@ -132,7 +199,13 @@ async def serve_audio(filename: str):
     filepath = settings.STORAGE_DIR / "recordings" / filename
     if not filepath.exists():
         raise HTTPException(status_code=404, detail="Audio file not found.")
-    return FileResponse(str(filepath), media_type="audio/mpeg")
+    media_type = "audio/wav" if filename.endswith(".wav") else "audio/mpeg"
+    return FileResponse(str(filepath), media_type=media_type)
+
+@api_router.get("/tools")
+async def get_registered_tools():
+    """Returns the central automation registry of allowlisted tools, schemas, and permissions."""
+    return central_registry.list_tools()
 
 # --- 4. SCREEN INTELLIGENCE ---
 @api_router.post("/screen/analyze")
@@ -562,4 +635,96 @@ async def create_and_execute_plan(payload: Dict[str, Any]):
     plan_id = planner_engine.save_plan(goal, steps)
     result = await planner_engine.execute_plan(plan_id, command_router, is_confirmed=is_confirmed)
     return result
+
+# --- 19. SECURITY & CAPABILITIES REGISTRY ---
+@api_router.get("/security/capabilities")
+async def list_security_capabilities():
+    """Returns all registered device capabilities with runtime OS support and enabled status."""
+    return capability_registry.get_all_capabilities()
+
+@api_router.post("/security/capabilities/{capability_id}/toggle")
+async def toggle_security_capability(capability_id: str, payload: Dict[str, bool]):
+    """Enables or disables a specific device capability with immediate resource cleanup."""
+    enabled = payload.get("enabled", True)
+    return capability_registry.toggle_capability(capability_id, enable=enabled)
+
+# --- 20. UNIFIED SEARCH ENGINE ---
+@api_router.get("/search/unified")
+async def unified_search(
+    q: str = Query(..., min_length=1),
+    source: str = Query(default="all"),
+    mode: str = Query(default="hybrid"),
+    limit: int = Query(default=15)
+):
+    """Executes multi-source unified search across memories, documents, chats, tasks, apps, and web."""
+    return await unified_search_engine.search(
+        query=q,
+        source_filter=source,
+        search_mode=mode,
+        limit=limit
+    )
+
+# --- 21. ACCURATE TRACKING & MONITORING ---
+@api_router.get("/tracking")
+async def get_tracking_dashboard():
+    """Returns all active trackers and recent tracking change events."""
+    trackers = tracking_engine.list_trackers()
+    events = tracking_engine.get_events(limit=20)
+    return {
+        "trackers": trackers,
+        "events": events,
+        "total_active": len([t for t in trackers if t["status"] != "paused"])
+    }
+
+@api_router.post("/tracking")
+async def create_tracker(payload: Dict[str, Any]):
+    """Registers a new user-approved persistent tracker."""
+    title = payload.get("title", "").strip()
+    tracker_type = payload.get("tracker_type", "custom")
+    target = payload.get("target", "").strip()
+    interval = payload.get("check_interval_seconds", 300)
+    notification = payload.get("notification_preference", "all")
+    metadata = payload.get("metadata", {})
+
+    if not title or not target:
+        raise HTTPException(status_code=400, detail="Title and target are required.")
+
+    return tracking_engine.create_tracker(
+        title=title,
+        tracker_type=tracker_type,
+        target=target,
+        check_interval_seconds=interval,
+        notification_preference=notification,
+        metadata=metadata
+    )
+
+@api_router.post("/tracking/{tracker_id}/toggle")
+async def toggle_tracker_status(tracker_id: str, payload: Dict[str, Any]):
+    """Pauses or resumes a tracker."""
+    pause = payload.get("pause")
+    try:
+        return tracking_engine.toggle_tracker(tracker_id, pause=pause)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+@api_router.delete("/tracking/{tracker_id}")
+async def delete_tracker(tracker_id: str):
+    """Deletes a tracker and its associated alerts."""
+    tracking_engine.delete_tracker(tracker_id)
+    return {"success": True, "message": "Tracker deleted."}
+
+@api_router.post("/tracking/{tracker_id}/check")
+async def force_check_tracker(tracker_id: str):
+    """Forces an immediate on-demand check of the specified tracker."""
+    res = tracking_engine.check_tracker(tracker_id)
+    if not res.get("success"):
+        raise HTTPException(status_code=404, detail=res.get("error", "Failed to check tracker."))
+    return res
+
+@api_router.post("/tracking/events/{event_id}/read")
+async def mark_event_read(event_id: str):
+    """Marks a tracking change event as read."""
+    tracking_engine.mark_event_read(event_id)
+    return {"success": True}
+
 

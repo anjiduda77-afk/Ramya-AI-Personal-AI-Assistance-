@@ -14,6 +14,13 @@ except ImportError:
 ROOT_DIR = Path(__file__).resolve().parents[4]
 BASE_DIR = Path(__file__).resolve().parents[2]
 
+try:
+    from dotenv import load_dotenv
+    load_dotenv(ROOT_DIR / ".env")
+    load_dotenv(BASE_DIR / ".env")
+except Exception:
+    pass
+
 class Settings:
     PROJECT_NAME: str = "Ramya AI"
     VERSION: str = "1.0.0"
@@ -58,9 +65,11 @@ class Settings:
     CLOUD_API_KEY: str = os.getenv("RAMYA_CLOUD_API_KEY", "")
     CLOUD_MODEL: str = os.getenv("RAMYA_CLOUD_MODEL", "gemini-1.5-flash")
 
-    # Specific Cloud Providers (Gemini, OpenAI, xAI Grok)
+    # Specific Cloud Providers (Gemini, OpenRouter, OpenAI, xAI Grok)
     GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", os.getenv("RAMYA_CLOUD_API_KEY", ""))
-    GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
+    GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-3-flash-preview")
+    OPENROUTER_API_KEY: str = os.getenv("OPENROUTER_API_KEY", "")
+    OPENROUTER_MODEL: str = os.getenv("OPENROUTER_MODEL", "nvidia/nemotron-3.5-lightning:free")
     OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
     OPENAI_MODEL: str = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
     XAI_API_KEY: str = os.getenv("XAI_API_KEY", "")

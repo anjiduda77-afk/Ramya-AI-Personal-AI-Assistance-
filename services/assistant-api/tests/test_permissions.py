@@ -1,8 +1,9 @@
 """
-Unit tests for Ramya AI Security and Central Permission Manager.
+Unit tests for Ramya AI Security, Central Permission Manager, and Automation Registry.
 """
 import pytest
 from app.security.permissions import permissions, PermissionTier
+from app.tools.registry import central_registry
 
 def test_permission_tiers():
     assert permissions.get_tier("get_weather") == PermissionTier.READ_ONLY
@@ -39,3 +40,28 @@ def test_blocks_dangerous_tokens():
     )
     assert not is_allowed
     assert "Security Violation" in reason
+
+def test_central_automation_registry_validation():
+    # Test valid arguments for open_application
+    valid, msg, cleaned = central_registry.validate_arguments("open_application", {"app_name": "notepad"})
+    assert valid is True
+    assert cleaned["app_name"] == "notepad"
+
+    # Test missing required argument
+    invalid, err_msg, _ = central_registry.validate_arguments("open_application", {})
+    assert invalid is False
+    assert "Missing required parameter" in err_msg
+
+    # Test allowed choices validation
+    invalid_action, act_err, _ = central_registry.validate_arguments("media_control", {"action": "unsupported_action"})
+    assert invalid_action is False
+    assert "allowed choices" in act_err
+
+    # Test platform compatibility
+    assert central_registry.is_platform_supported("open_application", "windows") is True
+    assert central_registry.is_platform_supported("get_weather", "web") is True
+
+    # Test dangerous injection blocked in argument
+    blocked, block_msg, _ = central_registry.validate_arguments("create_task", {"title": "rmdir /s /q c:"})
+    assert blocked is False
+    assert "security violation" in block_msg.lower()

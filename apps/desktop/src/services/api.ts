@@ -68,6 +68,17 @@ export interface PrivacyPreferences {
   allowScreenAnalysis: boolean;
 }
 
+export interface VoiceSettings {
+  voice_responses_enabled: boolean;
+  preferred_voice: string;
+  speech_speed: string;
+  auto_listen_after_reply: boolean;
+  wake_word_listening: boolean;
+  continuous_listening?: boolean;
+  speech_recognition_lang?: string;
+  silence_threshold_ms?: number;
+}
+
 export interface DeveloperDiagnostics {
   status: string;
   internalProvider: string;
@@ -115,6 +126,65 @@ export interface TaskPlan {
   spoken_response: string;
 }
 
+export interface DeviceCapability {
+  id: string;
+  name: string;
+  description: string;
+  supported_platforms: string[];
+  min_os_version: string;
+  required_permissions: string[];
+  requires_internet: boolean;
+  processing_mode: string;
+  risk_level: string;
+  requires_confirmation: boolean;
+  is_enabled: boolean;
+  is_platform_supported: boolean;
+  status: string;
+  os_settings_hint: string;
+}
+
+export interface UnifiedSearchResult {
+  id: string;
+  source: string;
+  title: string;
+  snippet: string;
+  relevance_score: number;
+  final_score?: number;
+  timestamp: string;
+  action_type: string;
+  action_target: string;
+  metadata?: Record<string, any>;
+}
+
+export interface Tracker {
+  id: string;
+  title: string;
+  tracker_type: string;
+  target: string;
+  status: 'normal' | 'alert' | 'active' | 'paused';
+  check_interval_seconds: number;
+  last_checked: string;
+  next_check: string;
+  change_summary: string;
+  notification_preference: string;
+  metadata?: Record<string, any>;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TrackerEvent {
+  id: string;
+  tracker_id: string;
+  tracker_title: string;
+  tracker_type: string;
+  event_type: string;
+  title: string;
+  details: string;
+  severity: 'info' | 'warning' | 'critical';
+  is_read: boolean;
+  created_at: string;
+}
+
 export const api = {
   async getHealth(): Promise<HealthData> {
     const res = await fetch(`${API_BASE}/health`);
@@ -132,12 +202,45 @@ export const api = {
     return res.json();
   },
 
-  async synthesizeVoice(text: string, voice?: string) {
+  async synthesizeVoice(text: string, voice?: string, rate?: string, forceOffline?: boolean) {
     const res = await fetch(`${API_BASE}/voice/synthesize`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text, voice })
+      body: JSON.stringify({ text, voice, rate, force_offline: forceOffline })
     });
+    return res.json();
+  },
+
+  async getVoiceSettings(): Promise<VoiceSettings> {
+    try {
+      const res = await fetch(`${API_BASE}/voice/settings`);
+      if (res.ok) return await res.json();
+    } catch {
+      // Fallback
+    }
+    return {
+      voice_responses_enabled: true,
+      preferred_voice: 'en-IN-NeerjaNeural',
+      speech_speed: '+0%',
+      auto_listen_after_reply: false,
+      wake_word_listening: true,
+      continuous_listening: true,
+      speech_recognition_lang: 'en-IN',
+      silence_threshold_ms: 850
+    };
+  },
+
+  async updateVoiceSettings(settings: Partial<VoiceSettings>): Promise<any> {
+    const res = await fetch(`${API_BASE}/voice/settings`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(settings)
+    });
+    return res.json();
+  },
+
+  async getAutomationTools(): Promise<Record<string, any>> {
+    const res = await fetch(`${API_BASE}/tools`);
     return res.json();
   },
 
@@ -506,6 +609,67 @@ export const api = {
   // Context Awareness
   async getActiveContext(): Promise<any> {
     const res = await fetch(`${API_BASE}/intelligence/context`);
+    return res.json();
+  },
+
+  // Security Capabilities
+  async getCapabilities(): Promise<DeviceCapability[]> {
+    const res = await fetch(`${API_BASE}/security/capabilities`);
+    return res.json();
+  },
+
+  async toggleCapability(capabilityId: string, enabled: boolean): Promise<any> {
+    const res = await fetch(`${API_BASE}/security/capabilities/${capabilityId}/toggle`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled })
+    });
+    return res.json();
+  },
+
+  // Unified Search Engine
+  async unifiedSearch(query: string, source: string = 'all', mode: string = 'hybrid'): Promise<any> {
+    const params = new URLSearchParams({ q: query, source, mode });
+    const res = await fetch(`${API_BASE}/search/unified?${params.toString()}`);
+    return res.json();
+  },
+
+  // Accurate Tracking & Monitoring
+  async getTrackingDashboard(): Promise<{ trackers: Tracker[]; events: TrackerEvent[]; total_active: number }> {
+    const res = await fetch(`${API_BASE}/tracking`);
+    return res.json();
+  },
+
+  async createTracker(data: { title: string; tracker_type: string; target: string; check_interval_seconds?: number; notification_preference?: string }): Promise<any> {
+    const res = await fetch(`${API_BASE}/tracking`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    return res.json();
+  },
+
+  async toggleTracker(trackerId: string, pause?: boolean): Promise<any> {
+    const res = await fetch(`${API_BASE}/tracking/${trackerId}/toggle`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pause })
+    });
+    return res.json();
+  },
+
+  async deleteTracker(trackerId: string): Promise<any> {
+    const res = await fetch(`${API_BASE}/tracking/${trackerId}`, { method: 'DELETE' });
+    return res.json();
+  },
+
+  async forceCheckTracker(trackerId: string): Promise<any> {
+    const res = await fetch(`${API_BASE}/tracking/${trackerId}/check`, { method: 'POST' });
+    return res.json();
+  },
+
+  async markEventRead(eventId: string): Promise<any> {
+    const res = await fetch(`${API_BASE}/tracking/events/${eventId}/read`, { method: 'POST' });
     return res.json();
   }
 };

@@ -15,6 +15,9 @@ import { WeatherMarketsScreen } from './screens/WeatherMarketsScreen';
 import { QuizLearningScreen } from './screens/QuizLearningScreen';
 import { SettingsDiagnosticsScreen } from './screens/SettingsDiagnosticsScreen';
 import { ProfileScreen } from './screens/ProfileScreen';
+import { VoiceLabScreen } from './screens/VoiceLabScreen';
+import { SecurityPermissionsScreen } from './screens/SecurityPermissionsScreen';
+import { UnifiedSearchTrackingScreen } from './screens/UnifiedSearchTrackingScreen';
 import { AuthModal } from './components/AuthModal';
 
 export const App: React.FC = () => {
@@ -47,12 +50,32 @@ export const App: React.FC = () => {
     };
     window.addEventListener('keydown', handleKeyDown);
 
+    // 4. Hash Routing Synchronization
+    const handleHashChange = () => {
+      const rawHash = window.location.hash.replace('#', '').replace('/', '').trim() as NavScreenId;
+      if (rawHash && [
+        'command_center', 'ai_chat', 'voice_lab', 'search_tracking', 'security',
+        'screen_intel', 'document_reader', 'productivity', 'weather_markets',
+        'quiz_learning', 'settings', 'profile'
+      ].includes(rawHash)) {
+        setActiveScreen(rawHash);
+      }
+    };
+    window.addEventListener('hashchange', handleHashChange);
+    handleHashChange();
+
     return () => {
       unsubOrb();
       clearInterval(timer);
       window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('hashchange', handleHashChange);
     };
   }, []);
+
+  const handleSelectScreen = (screenId: NavScreenId) => {
+    setActiveScreen(screenId);
+    window.location.hash = screenId;
+  };
 
   const fetchHealth = async () => {
     try {
@@ -91,6 +114,12 @@ export const App: React.FC = () => {
         return <CommandCenterScreen orbState={orbState} setOrbState={setOrbState} onNavigate={setActiveScreen} />;
       case 'ai_chat':
         return <AiChatScreen orbState={orbState} setOrbState={setOrbState} />;
+      case 'voice_lab':
+        return <VoiceLabScreen />;
+      case 'search_tracking':
+        return <UnifiedSearchTrackingScreen />;
+      case 'security':
+        return <SecurityPermissionsScreen />;
       case 'screen_intel':
         return <ScreenIntelligenceScreen />;
       case 'document_reader':
@@ -132,7 +161,7 @@ export const App: React.FC = () => {
           <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
             <Navigation
               activeScreen={activeScreen}
-              onSelectScreen={setActiveScreen}
+              onSelectScreen={handleSelectScreen}
               isFloatingMode={isFloatingMode}
               onToggleFloating={() => setIsFloatingMode(!isFloatingMode)}
               userProfile={userProfile}

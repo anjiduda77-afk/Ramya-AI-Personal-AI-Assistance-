@@ -63,31 +63,59 @@
 
 ## 2. Technology Stack
 
-- **Backend Core:** Python 3.14, FastAPI, SQLite with automatic schema migrations, Edge-TTS, Faster-Whisper, MSS, Pillow.
+- **Backend Core:** Python 3.14, FastAPI, SQLite with automatic schema migrations, Edge-TTS (v7.3.1), pyttsx3 SAPI5 native offline engine, Faster-Whisper, MSS, Pillow.
 - **AI Providers:** Ollama (Gemma 3 4B), Google Gemini REST API, OpenAI Chat Completions, xAI Grok API.
-- **Desktop UI:** React 18, Vite, TypeScript, Cyberpunk Neon Design System, WebSockets.
+- **Desktop UI:** React 18, Vite, TypeScript, Cyberpunk Neon Design System, WebSockets, Central Audio Player with barge-in support.
 - **Android App:** Kotlin 2.0, Jetpack Compose, Foreground Microphone Service, MediaProjection Screen Capture, Intent Launcher.
-- **Testing:** Pytest 9.1 with 35 unit and integration tests (100% pass rate).
+- **Testing:** Pytest 9.1 with 51 unit and integration tests (100% pass rate).
 
 ---
 
-## 3. Verified Command Routing Capabilities
+## 3. Verified Command Routing Capabilities & Central Automation Registry
 
-| User Command | Routed Module | Public Intent | Outcome |
-| :--- | :--- | :--- | :--- |
-| `"Hey Ramya"` | Wake Word Spotter | `conversation` | *"Yes! I am listening. How can I help you?"* |
-| `"Play relaxing music"` | Free Legal Music Player | `media_control` | Plays Deep Focus Ambient stream |
-| `"Tell my friend in English that I will arrive in ten minutes"` | English Tutor / Telugu Engine | `conversation` | *"I'll be there in ten minutes."* |
-| `"Repeat yesterday's English lesson"` | English Learning Tutor | `quiz_learning` | Retrieves yesterday's lesson with Telugu meaning |
-| `"Remember that I prefer dark cyberpunk mode"` | Personal Memory Engine | `productivity` | Saves preference to SQLite vault |
-| `"What theme do I like?"` (Follow-up) | Local Ollama + Gemma 3 4B | `conversation` | *"You prefer dark cyberpunk mode, right?"* |
-| `"What is the weather in Hyderabad?"` | Live Data Engine | `live_info` | Real-time temperature, humidity, and condition |
-| `"Open YouTube"` | Allowlisted App Launcher | `system_app` | Launches official YouTube app / website |
-| `"Search for Python programming language"` | Web Search Engine | `live_info` | Instant abstract from Wikipedia / DuckDuckGo |
+All automations are governed by the **Central Automation Registry** (`services/assistant-api/app/tools/registry.py`) with strict parameter validation, risk levels, and confirmation gates:
+
+| User Command | Routed Module / Tool | Risk Tier | Spoken Voice Response | Screen Outcome |
+| :--- | :--- | :--- | :--- | :--- |
+| `"Hey Ramya"` | Wake Word Spotter | `READ_ONLY` | *"Yes! I'm listening. How can I help you?"* | Orb switches to active listening state |
+| `"Play relaxing music"` | `music.play_genre` | `LOW_RISK` | *"Playing Deep Focus Ambient Atmosphere."* | Free legal audio stream starts playing |
+| `"Tell my friend in English that I will arrive in ten minutes"` | `english_tutor.translate` | `READ_ONLY` | *"I'll be there in ten minutes."* | Conversational Telugu-to-English translation card |
+| `"Repeat yesterday's English lesson"` | `english_tutor.lesson` | `READ_ONLY` | *"Here is your previous lesson for revision."* | Lesson card with Telugu meaning and pronunciation |
+| `"Remember that I prefer dark cyberpunk mode"` | `memory.save` | `LOW_RISK` | *"I've saved your preference."* | Memory entry created in SQLite vault |
+| `"What theme do I like?"` (Follow-up) | `chat.query` (Gemma 3 4B) | `READ_ONLY` | *"You prefer dark cyberpunk mode."* | Grounded memory recall without hallucinations |
+| `"What is the weather in Hyderabad?"` | `weather.get_current` | `READ_ONLY` | *"The weather in Hyderabad is 28°C and clear."* | Live weather forecast card |
+| `"Open YouTube"` | `app.launch` | `LOW_RISK` | *"Opening YouTube."* | Allowlisted app/URL launches safely |
+| `"Delete all database files"` | Unapproved Command | `HIGH_RISK` | *"I cannot execute destructive system commands."* | Dangerous command rejected by safety token filter |
 
 ---
 
-## 4. Setup and Quick Start
+## 4. Voice Assistant Architecture
+
+Ramya AI implements a polished multi-tier speech pipeline similar to Siri, Google Assistant, and Alexa:
+
+1. **Microphone Capture & Wake Word**: Continuously detects "Hey Ramya" via Web Speech API / Android Foreground Service.
+2. **Intent Analysis & Tool Execution**: Backend validates arguments against the Central Automation Registry.
+3. **Response Splitting**: 
+   - `message`: Full markdown text with markdown formatting, citations, tables, and detail cards shown on screen.
+   - `spoken_response`: Concise, natural conversational phrase (max ~250 chars) stripped of code, markdown, and raw logs, optimized for Indian English speech.
+4. **Multi-Tier Audio Synthesis**:
+   - **Tier 1 (Online Neural)**: Microsoft Edge-TTS (`en-IN-NeerjaNeural` female, `en-IN-PrabhatNeural` male).
+   - **Tier 2 (Offline Native)**: Windows SAPI5 via `pyttsx3` (Microsoft Zira / David) synthesized directly to local WAV without internet.
+   - **Tier 3 (Acoustic Chime / Retry)**: Acoustic chime fallback if all speech devices are muted, with clear on-screen retry button.
+5. **Single-Track Managed Playback**:
+   - Central Audio Player singleton prevents duplicate and overlapping speech.
+   - **Speech Interruption (Barge-in)**: Clicking the orb or activating the microphone instantly stops active speech playback.
+6. **Persistent Voice Settings**:
+   - Voice responses ON/OFF toggle.
+   - Preferred voice selection (`en-IN-NeerjaNeural`, `en-IN-PrabhatNeural`, `en-US-JennyNeural`, `local-offline`).
+   - Speech speed adjustment (0.8x to 1.3x).
+   - Auto-listening cycle after speech completes.
+   - Wake-word background listening toggle.
+   - One-click "Test Voice" button.
+
+---
+
+## 5. Setup and Quick Start
 
 ### 1. Start Local Ollama (Offline First)
 ```powershell
@@ -113,15 +141,21 @@ npm run dev
 ### 4. Run Test Suite
 ```powershell
 cd services/assistant-api
-pytest -v
+python -m pytest -v
 ```
 
 ---
 
-## 5. Security & Privacy Audit
+## 6. Security & Privacy Audit
 
 - **Audit Tool:** `audit_secrets.py`
 - **Git History Scan:** 0 leaked secrets or credentials across all commits.
 - **Working Tree Scan:** 0 private API keys, tokens, or credentials in tracked/untracked files.
 - **Client Bundle Scan:** 0 backend model names or secrets compiled into the Vite frontend distribution.
+- **Zero-Trust Separation:** Frontend is strictly presentation and input capture. All automation, provider routing, secrets, and tool validations execute exclusively in the backend and native OS layers.
+- **Security Audit:** See [SECURITY_AUDIT.md](SECURITY_AUDIT.md) for threat modeling, defenses, and penetration testing.
+- **Permission Matrix:** See [PERMISSION_MATRIX.md](PERMISSION_MATRIX.md) for the 14-capability registry across Windows and Android.
+- **Search Architecture:** See [SEARCH_ARCHITECTURE.md](SEARCH_ARCHITECTURE.md) for hybrid FTS5 and vector retrieval.
+- **Tracking Capabilities:** See [TRACKING_CAPABILITIES.md](TRACKING_CAPABILITIES.md) for autonomous state monitoring.
+- **Test Report:** See [TEST_REPORT.md](TEST_REPORT.md) for 63/63 passing unit and integration tests.
 - **License:** MIT License. All rights reserved.

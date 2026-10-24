@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
-import { api, AssistantResponse, GroundedSource } from '../services/api';
+import React, { useState, useEffect } from 'react';
+import { api, AssistantResponse, GroundedSource, VoiceSettings } from '../services/api';
 import { OrbState } from '../services/websocket';
+import { audioPlayer } from '../services/audioPlayer';
 
 interface AiChatScreenProps {
   orbState: OrbState;
@@ -28,27 +29,108 @@ export const AiChatScreen: React.FC<AiChatScreenProps> = ({ orbState, setOrbStat
   ]);
   const [inputQuery, setInputQuery] = useState('');
   const [isSending, setIsSending] = useState(false);
+  const [isListening, setIsListening] = useState(false);
+  const [voiceSettings, setVoiceSettings] = useState<VoiceSettings>({
+    voice_responses_enabled: true,
+    preferred_voice: 'en-IN-NeerjaNeural',
+    speech_speed: '+0%',
+    auto_listen_after_reply: false,
+    wake_word_listening: true
+  });
+
+  useEffect(() => {
+    api.getVoiceSettings().then(setVoiceSettings).catch(console.warn);
+  }, []);
+
+  const handleToggleMic = () => {
+    audioPlayer.stop();
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      alert("Speech recognition not supported in this browser. Please use Chrome/Edge or type your message.");
+      return;
+    }
+
+    if (isListening) {
+      setIsListening(false);
+      setOrbState('ready');
+      return;
+    }
+
+    try {
+      const recognition = new SpeechRecognition();
+      recognition.lang = 'en-IN';
+      recognition.interimResults = true;
+      recognition.continuous = false;
+
+      recognition.onstart = () => {
+        setIsListening(true);
+        setOrbState('listening');
+      };
+
+      recognition.onresult = (event: any) => {
+        const spoken = event.results[0][0].transcript;
+        setInputQuery(spoken);
+        if (event.results[0].isFinal) {
+          setIsListening(false);
+          handleSend(spoken);
+        }
+      };
+
+      recognition.onerror = () => {
+        setIsListening(false);
+        setOrbState('ready');
+      };
+
+      recognition.onend = () => {
+        setIsListening(false);
+      };
+
+      recognition.start();
+    } catch (e: any) {
+      setIsListening(false);
+      setOrbState('ready');
+    }
+  };
 
   const playSpokenAudio = async (text: string) => {
+    if (!voiceSettings.voice_responses_enabled || !text.trim()) {
+      setOrbState('ready');
+      return;
+    }
+
     try {
       setOrbState('speaking');
-      const audioRes = await api.synthesizeVoice(text);
+      const audioRes = await api.synthesizeVoice(
+        text,
+        voiceSettings.preferred_voice,
+        voiceSettings.speech_speed
+      );
       if (audioRes.success && audioRes.url) {
-        const audio = new Audio(`http://127.0.0.1:8000${audioRes.url}`);
-        audio.onended = () => setOrbState('ready');
-        audio.onerror = () => setOrbState('ready');
-        audio.play().catch(() => setOrbState('ready'));
+        const fullUrl = `http://127.0.0.1:8000${audioRes.url}`;
+        audioPlayer.playSpeech(
+          fullUrl,
+          text,
+          () => {
+            if (voiceSettings.auto_listen_after_reply) {
+              handleToggleMic();
+            } else {
+              setOrbState('ready');
+            }
+          },
+          () => setOrbState('ready')
+        );
       } else {
-        setTimeout(() => setOrbState('ready'), 2000);
+        setTimeout(() => setOrbState('ready'), 1500);
       }
     } catch {
       setOrbState('ready');
     }
   };
 
-  const handleSend = async () => {
-    if (!inputQuery.trim() || isSending) return;
-    const userText = inputQuery.trim();
+  const handleSend = async (queryOverride?: string) => {
+    const rawText = queryOverride !== undefined ? queryOverride : inputQuery;
+    if (!rawText.trim() || isSending) return;
+    const userText = rawText.trim();
     setInputQuery('');
 
     const userMsg: Message = {
@@ -100,13 +182,38 @@ export const AiChatScreen: React.FC<AiChatScreenProps> = ({ orbState, setOrbStat
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', padding: '24px 32px', gap: '18px' }}>
-      <div>
-        <h2 style={{ fontSize: '1.3rem', color: 'var(--neon-cyan)', margin: 0, letterSpacing: '1.5px' }}>
-          VOICE & CHAT ASSISTANT
-        </h2>
-        <div style={{ color: 'var(--text-muted)', fontSize: '0.82rem', marginTop: '4px' }}>
-          Natural conversational intelligence in clear Indian English
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div>
+          <h2 style={{ fontSize: '1.3rem', color: 'var(--neon-cyan)', margin: 0, letterSpacing: '1.5px' }}>
+            VOICE & CHAT ASSISTANT
+          </h2>
+          <div style={{ color: 'var(--text-muted)', fontSize: '0.82rem', marginTop: '4px' }}>
+            Natural conversational intelligence in clear Indian English
+          </div>
         </div>
+        <button
+          onClick={() => {
+            const next = !voiceSettings.voice_responses_enabled;
+            setVoiceSettings(prev => ({ ...prev, voice_responses_enabled: next }));
+            api.updateVoiceSettings({ voice_responses_enabled: next }).catch(console.warn);
+          }}
+          style={{
+            background: voiceSettings.voice_responses_enabled ? 'rgba(0, 255, 157, 0.12)' : 'rgba(255, 255, 255, 0.05)',
+            border: voiceSettings.voice_responses_enabled ? '1px solid var(--neon-green)' : '1px solid var(--border-subtle)',
+            color: voiceSettings.voice_responses_enabled ? 'var(--neon-green)' : 'var(--text-dim)',
+            padding: '8px 14px',
+            borderRadius: '6px',
+            cursor: 'pointer',
+            fontSize: '0.75rem',
+            fontFamily: 'Orbitron, sans-serif',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px'
+          }}
+        >
+          <span>{voiceSettings.voice_responses_enabled ? '🔊' : '🔇'}</span>
+          <span>VOICE REPLIES: {voiceSettings.voice_responses_enabled ? 'ON' : 'OFF'}</span>
+        </button>
       </div>
 
       {/* Messages Scroll Area */}
@@ -219,7 +326,7 @@ export const AiChatScreen: React.FC<AiChatScreenProps> = ({ orbState, setOrbStat
       </div>
 
       {/* Input Bar */}
-      <div style={{ display: 'flex', gap: '12px' }}>
+      <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
         <input
           type="text"
           value={inputQuery}
@@ -229,20 +336,45 @@ export const AiChatScreen: React.FC<AiChatScreenProps> = ({ orbState, setOrbStat
           style={{
             flex: 1,
             background: 'rgba(8, 12, 22, 0.85)',
-            border: '1px solid var(--border-subtle)',
+            border: isListening ? '1px solid var(--neon-green)' : '1px solid var(--border-subtle)',
             borderRadius: '8px',
             padding: '14px 18px',
             color: '#fff',
             fontSize: '0.92rem',
             outline: 'none',
-            fontFamily: 'Rajdhani, sans-serif'
+            fontFamily: 'Rajdhani, sans-serif',
+            boxShadow: isListening ? '0 0 10px rgba(0, 255, 157, 0.25)' : 'none'
           }}
         />
         <button
+          onClick={handleToggleMic}
+          title={isListening ? "Stop listening" : "Click to speak with microphone"}
+          style={{
+            background: isListening ? '#ff3366' : 'rgba(0, 255, 157, 0.12)',
+            border: isListening ? '1px solid #ff3366' : '1px solid var(--neon-green)',
+            color: isListening ? '#fff' : 'var(--neon-green)',
+            padding: '0 18px',
+            height: '48px',
+            borderRadius: '8px',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            fontFamily: 'Orbitron, sans-serif',
+            fontSize: '0.75rem',
+            fontWeight: 700,
+            transition: 'all 0.2s ease',
+            boxShadow: isListening ? '0 0 15px rgba(255, 51, 102, 0.5)' : 'none'
+          }}
+        >
+          <span>🎙️</span>
+          <span>{isListening ? 'LISTENING...' : 'MIC'}</span>
+        </button>
+        <button
           className="cyber-btn"
           disabled={isSending}
-          onClick={handleSend}
-          style={{ padding: '0 24px' }}
+          onClick={() => handleSend()}
+          style={{ padding: '0 24px', height: '48px' }}
         >
           {isSending ? 'SENDING...' : 'SEND'}
         </button>

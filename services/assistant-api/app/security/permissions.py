@@ -77,14 +77,21 @@ class PermissionManager:
         """
         tier = self.get_tier(tool_name)
         
+        # Check if underlying device capability is enabled
+        from app.security.capability_registry import capability_registry, TOOL_TO_CAPABILITY
+        cap_id = TOOL_TO_CAPABILITY.get(tool_name)
+        if cap_id and not capability_registry.is_capability_enabled(cap_id):
+            self.log_audit(tool_name, tier.value, "denied", f"Capability '{cap_id}' is disabled by user policy.")
+            return False, f"Feature '{tool_name}' is currently disabled because the '{cap_id}' capability is turned off in Security & Permissions.", tier
+
         # Guard against prompt injection or malicious command attempts
         if "command" in arguments and isinstance(arguments["command"], str):
             cmd_lower = arguments["command"].lower()
-            dangerous_tokens = ["rmdir /s", "del /f", "format ", "powershell -enc", "curl ", "invoke-webrequest"]
+            dangerous_tokens = ["rmdir /s", "del /f", "format ", "powershell -enc", "curl ", "invoke-webrequest", "bash -c", "eval(", "; drop table", "shutdown", "wget "]
             for token in dangerous_tokens:
                 if token in cmd_lower:
                     self.log_audit(tool_name, tier.value, "denied", f"Blocked potentially dangerous token: {token}")
-                    return False, f"Security Violation: Execution of '{token}' is strictly forbidden.", tier
+                    return False, f"Security Violation: Execution of '{token}' is strictly forbidden by Zero-Trust policy.", tier
 
         # High risk requires explicit user confirmation
         if tier == PermissionTier.HIGH_RISK:

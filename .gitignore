@@ -46,6 +46,7 @@ storage/vectors/
 storage/recordings/
 storage/screenshots/
 storage/backups/
+storage/voices/
 
 # IDE & OS
 .vscode/

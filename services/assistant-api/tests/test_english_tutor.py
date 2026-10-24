@@ -5,6 +5,15 @@ and natural Telugu-to-English meaning translation.
 """
 import pytest
 from app.tools.english_tutor import english_tutor
+from app.database.db import db
+
+@pytest.fixture(autouse=True)
+def reset_english_state():
+    with db.get_connection() as conn:
+        conn.execute("UPDATE english_learning_records SET status = 'revised' WHERE id = 'lesson-1';")
+        conn.execute("UPDATE english_learning_records SET status = 'new' WHERE id != 'lesson-1';")
+        conn.execute("UPDATE english_learning_progress SET pending_revision_sentence = 'Have you eaten?' WHERE id = 'current';")
+    yield
 
 def test_daily_revision_check():
     # Progress starts with Day 1 sentence "Have you eaten?" pending revision

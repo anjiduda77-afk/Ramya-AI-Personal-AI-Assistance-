@@ -33,10 +33,12 @@ export const AiOrb: React.FC<AiOrbProps> = ({
     success: 'COMPLETED',
     cancelled: 'CANCELLED',
     needs_attention: 'ATTENTION',
-    error: 'ATTENTION'
+    error: 'ATTENTION',
+    follow_up: 'FOLLOW UP...',
+    paused: 'PAUSED'
   };
 
-  const isInteractiveState = state === 'listening' || state === 'speaking' || state === 'working' || state === 'processing' || state === 'understanding';
+  const isInteractiveState = state === 'listening' || state === 'speaking' || state === 'working' || state === 'processing' || state === 'understanding' || state === 'follow_up';
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>

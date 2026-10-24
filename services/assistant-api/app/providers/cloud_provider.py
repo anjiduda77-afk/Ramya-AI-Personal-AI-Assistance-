@@ -25,7 +25,10 @@ class CloudAIProvider(BaseAIProvider):
         self._provider_type = pt.lower() if pt else "gemini"
         
         # Pick appropriate API key and model based on provider type
-        if "xai" in self._provider_type or "grok" in self._provider_type:
+        if "openrouter" in self._provider_type:
+            self.api_key = api_key or settings.OPENROUTER_API_KEY or settings.CLOUD_API_KEY
+            self.model = model or settings.OPENROUTER_MODEL or "nvidia/nemotron-3.5-lightning:free"
+        elif "xai" in self._provider_type or "grok" in self._provider_type:
             self.api_key = api_key or settings.XAI_API_KEY or settings.CLOUD_API_KEY
             self.model = model or settings.XAI_MODEL or "grok-beta"
         elif "openai" in self._provider_type:
@@ -45,9 +48,10 @@ class CloudAIProvider(BaseAIProvider):
             return False
         try:
             target = (
-                "https://api.openai.com" if "openai" in self._provider_type
+                "https://openrouter.ai" if "openrouter" in self._provider_type
+                else ("https://api.openai.com" if "openai" in self._provider_type
                 else ("https://api.x.ai" if ("xai" in self._provider_type or "grok" in self._provider_type)
-                else "https://generativelanguage.googleapis.com")
+                else "https://generativelanguage.googleapis.com"))
             )
             async with httpx.AsyncClient(timeout=3.0) as client:
                 res = await client.get(target)
@@ -82,6 +86,10 @@ class CloudAIProvider(BaseAIProvider):
         """Sends prompt to OpenAI, xAI Grok, or Gemini with bounded exponential backoff."""
         if not self.api_key:
             return "Cloud intelligence is not currently configured. I will continue answering using local memory."
+
+        # 0. OpenRouter API Adapter (Free Tier and Custom Models)
+        if "openrouter" in self._provider_type:
+            return await self._generate_openrouter(prompt, system_prompt, context, temperature)
 
         # 1. OpenAI Chat Completions Adapter
         if "openai" in self._provider_type:
@@ -228,6 +236,74 @@ class CloudAIProvider(BaseAIProvider):
 
         return "I'm temporarily unable to answer that request. Please try again shortly."
 
+    async def _generate_openrouter(
+        self,
+        prompt: str,
+        system_prompt: Optional[str],
+        context: Optional[str],
+        temperature: float
+    ) -> str:
+        """Adapter for OpenRouter API with free and paid model tiers."""
+        url = "https://openrouter.ai/api/v1/chat/completions"
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+            "HTTP-Referer": "https://ramya-ai.local",
+            "X-Title": "Ramya AI Assistant"
+        }
+
+        trimmed_context = (context[:3000] + "...") if context and len(context) > 3000 else context
+        messages = []
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
+        if trimmed_context:
+            messages.append({"role": "system", "content": f"Context Information:\n{trimmed_context}"})
+        messages.append({"role": "user", "content": prompt})
+
+        target_model = self.model if self.model else "nvidia/nemotron-3.5-lightning:free"
+        payload = {
+            "model": target_model,
+            "messages": messages,
+            "temperature": temperature,
+            "max_tokens": 1024
+        }
+
+        for attempt in range(3):
+            try:
+                async with httpx.AsyncClient(timeout=25.0) as client:
+                    res = await client.post(url, json=payload, headers=headers)
+                    if res.status_code == 200:
+                        data = res.json()
+                        usage = data.get("usage", {})
+                        self._record_usage(
+                            usage.get("prompt_tokens", 0),
+                            usage.get("completion_tokens", 0)
+                        )
+                        choices = data.get("choices", [])
+                        if choices:
+                            return choices[0].get("message", {}).get("content", "").strip()
+                        return "I am ready, but no response was returned."
+                    elif res.status_code == 429:
+                        logger.warning(f"OpenRouter rate limited (429), attempt {attempt + 1}")
+                        await asyncio.sleep(2 ** attempt)
+                        continue
+                    elif res.status_code >= 500:
+                        logger.warning(f"OpenRouter server error ({res.status_code}), attempt {attempt + 1}")
+                        await asyncio.sleep(1.5 ** attempt)
+                        continue
+                    else:
+                        logger.error(f"OpenRouter error status: {res.status_code}")
+                        return "Cloud intelligence is temporarily unable to answer that request. Please try again shortly."
+            except httpx.TimeoutException:
+                logger.warning(f"OpenRouter timeout on attempt {attempt + 1}")
+                if attempt == 2:
+                    return "The request timed out. Please try again or use local offline mode."
+            except Exception as e:
+                logger.error(f"OpenRouter request error: {e}")
+                return "I couldn't complete that online request. You can try again or switch to offline mode."
+
+        return "I'm temporarily unable to answer that request. Please try again shortly."
+
     async def _generate_gemini(
         self,
         prompt: str,
@@ -235,9 +311,20 @@ class CloudAIProvider(BaseAIProvider):
         context: Optional[str],
         temperature: float
     ) -> str:
-        model_name = self.model if self.model and "gemini" in self.model else "gemini-1.5-flash"
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={self.api_key}"
-        headers = {"Content-Type": "application/json"}
+        models_to_try = [
+            self.model if self.model and "gemini" in self.model else "gemini-3-flash-preview",
+            "gemini-3-flash-preview",
+            "gemini-3.5-flash",
+            "gemini-2.5-flash"
+        ]
+        # Deduplicate while preserving order
+        seen = set()
+        clean_models = []
+        for m in models_to_try:
+            m_clean = m.replace("models/", "")
+            if m_clean not in seen:
+                seen.add(m_clean)
+                clean_models.append(m_clean)
 
         full_prompt = prompt
         if context:
@@ -252,24 +339,39 @@ class CloudAIProvider(BaseAIProvider):
                 "maxOutputTokens": 1024
             }
         }
+        headers = {"Content-Type": "application/json"}
 
-        try:
-            async with httpx.AsyncClient(timeout=25.0) as client:
-                res = await client.post(url, json=payload, headers=headers)
-                if res.status_code == 200:
-                    data = res.json()
-                    candidates = data.get("candidates", [])
-                    if candidates:
-                        parts = candidates[0].get("content", {}).get("parts", [])
-                        if parts:
-                            return parts[0].get("text", "").strip()
-                    return "I am ready, but no response was returned."
-                else:
-                    logger.error(f"Gemini API returned status {res.status_code}")
-                    return "Cloud intelligence is temporarily unable to answer that request. Please try again shortly."
-        except Exception as e:
-            logger.error(f"Gemini connection error: {e}")
-            return "I couldn't complete that online request. You can try again shortly."
+        for model_name in clean_models:
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={self.api_key}"
+            try:
+                async with httpx.AsyncClient(timeout=25.0) as client:
+                    res = await client.post(url, json=payload, headers=headers)
+                    if res.status_code == 200:
+                        data = res.json()
+                        candidates = data.get("candidates", [])
+                        if candidates:
+                            parts = candidates[0].get("content", {}).get("parts", [])
+                            if parts:
+                                # Record approximate token count
+                                self._record_usage(len(full_prompt) // 4, len(parts[0].get("text", "")) // 4)
+                                return parts[0].get("text", "").strip()
+                        return "I am ready, but no response was returned."
+                    elif res.status_code in [404, 400]:
+                        logger.warning(f"Gemini model {model_name} returned {res.status_code}, trying next model.")
+                        continue
+                    elif res.status_code == 429:
+                        logger.warning(f"Gemini API rate limited (429) on model {model_name}.")
+                        return "Google Gemini rate limit reached. Please try again shortly or switch to local Ollama."
+                    else:
+                        logger.error(f"Gemini API returned status {res.status_code} for {model_name}")
+            except httpx.TimeoutException:
+                logger.warning(f"Gemini timeout on model {model_name}")
+                continue
+            except Exception as e:
+                logger.error(f"Gemini connection error: {e}")
+                return "I couldn't complete that online request. You can try again shortly."
+
+        return "Cloud intelligence is temporarily unable to answer that request. Please try again shortly or use local offline mode."
 
     async def stream_response(
         self,

@@ -17,7 +17,9 @@ export type OrbState =
   | 'success'
   | 'cancelled'
   | 'needs_attention'
-  | 'error';
+  | 'error'
+  | 'follow_up'
+  | 'paused';
 
 class WebSocketService {
   private ws: WebSocket | null = null;

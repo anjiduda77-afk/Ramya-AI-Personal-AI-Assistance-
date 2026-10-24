@@ -25,12 +25,20 @@ from app.tools.web_search import web_search_engine
 from app.intelligence.context_engine import context_engine
 from app.intelligence.emotional_engine import emotional_engine
 from app.intelligence.planner import planner_engine
+from app.voice.tts import clean_text_for_speech
+from app.tools.registry import central_registry
+from app.security.capability_registry import capability_registry
+from app.search.unified_search import unified_search_engine
+from app.tracking.engine import tracking_engine
 
 logger = logging.getLogger("ramya.tools.router")
 
 STOP_WORDS = {"for", "to", "me", "today", "tomorrow", "this", "that", "the", "a", "an", "is", "it", "my", "your", "now", "please"}
 
 class CommandRouter:
+    def __init__(self):
+        self._response_cache: Dict[str, Any] = {}
+
     async def route_and_execute(
         self,
         raw_query: str,
@@ -60,6 +68,32 @@ class CommandRouter:
                 message="Ramya is ready and listening. Speak a command or question.",
                 status="success"
             )
+
+        # 1a. Exit & Polite Conversation Closing Check
+        if re.search(r"^(?:(?:that'?s\s+all|stop\s+listening|bye|goodbye|cancel|nevermind|nothing|thank\s+you|thanks)(?:\s+(?:ramya|for\s+now|so\s+much))?|[!\.]*)$", lower_q) or lower_q in [
+            "stop", "bye", "goodbye", "cancel", "that's all", "thats all", "nothing", "thank you", "thanks", "exit", "close", "nevermind", "no thanks"
+        ]:
+            closing_spoken = "You're welcome! Let me know whenever you need me." if "thank" in lower_q else "Goodbye! I'll be here whenever you need me."
+            return self._build_response(
+                task_id=task_id,
+                query=raw_query,
+                intent="exit_conversation",
+                spoken=closing_spoken,
+                message=closing_spoken,
+                status="success"
+            )
+
+        # 1b. Fast-Path In-Memory Cache (for identical non-destructive queries within 120s)
+        cache_key = f"{lower_q}:{is_user_confirmed}"
+        cached = self._response_cache.get(cache_key)
+        if cached:
+            cached_time, cached_resp = cached
+            if time.time() - cached_time < 120.0 and cached_resp.get("status") == "success":
+                # Return fast cached response with refreshed task_id and sub-millisecond latency
+                cached_copy = dict(cached_resp)
+                cached_copy["task_id"] = task_id
+                cached_copy["latency_ms"] = round((time.time() - start_time) * 1000, 2)
+                return cached_copy
 
         # 2. Human Intelligence Layer: Emotional Cues & Contextual Pronoun Resolution
         detected_emotion = emotional_engine.detect_emotion(clean_q)
@@ -453,6 +487,40 @@ class CommandRouter:
                     card={"type": "screen", "title": search_res["title"], "data": search_res}
                 )
 
+        # --- Tracking Dashboard Inspection ---
+        if re.search(r"\b(?:track(?:ing)?\s+dashboard|show\s+trackers?|check\s+trackers?|what\s+are\s+you\s+tracking|system\s+monitors?)\b", lower_q):
+            t_res = tracking_engine.check_all_trackers()
+            trackers_list = tracking_engine.list_trackers()
+            active_count = len([t for t in trackers_list if t["status"] != "paused"])
+            spoken = f"You have {active_count} active trackers monitoring tasks, documents, and system health."
+            details = "\n".join([f"- **{t['title']}** ({t['status'].upper()}): {t['change_summary']}" for t in trackers_list[:4]])
+            return self._build_response(
+                task_id=task_id,
+                query=clean_q,
+                intent="task_planning",
+                spoken=spoken,
+                message=f"### Active Assistant Trackers\n\n{details}",
+                card={"type": "task", "title": "Assistant Trackers", "data": {"trackers": trackers_list}}
+            )
+
+        # --- Natural Language Unified Search Engine ---
+        if re.search(r"\b(?:find\s+(?:the\s+)?(?:pdf|file|doc|document|conversation|notes?)|search\s+(?:my\s+)?(?:files|documents|conversations|memories|tasks)|what\s+did\s+i\s+(?:learn|ask|do)\s+(?:yesterday|last\s+week))\b", lower_q):
+            search_out = await unified_search_engine.search(clean_q)
+            if search_out.get("total", 0) > 0:
+                top_item = search_out["results"][0]
+                spoken = f"I found {search_out['total']} result(s). Most relevant is {top_item['title']}."
+                msg_lines = [f"**Found {search_out['total']} matching item(s):**\n"]
+                for it in search_out["results"][:3]:
+                    msg_lines.append(f"- **{it['title']}** ({it['source'].capitalize()}): {it['snippet']}")
+                return self._build_response(
+                    task_id=task_id,
+                    query=clean_q,
+                    intent="document_task",
+                    spoken=spoken,
+                    message="\n".join(msg_lines),
+                    card={"type": "document", "title": "Unified Search Results", "data": search_out}
+                )
+
         # --- I. General Conversational Intelligence: Local First ---
         response_text, provider_name, model_name, is_offline = await router.generate(clean_q)
         
@@ -487,9 +555,10 @@ class CommandRouter:
         """Builds clean public response schema without internal secrets or execution traces."""
         # Adapt tone based on emotional awareness (without claiming consciousness)
         final_message = message
-        final_spoken = spoken
+        final_spoken = clean_text_for_speech(spoken, max_chars=250)
         if emotion != "neutral":
-            final_message, final_spoken = emotional_engine.adapt_response(message, spoken, emotion)
+            final_message, adapted_spoken = emotional_engine.adapt_response(message, final_spoken, emotion)
+            final_spoken = clean_text_for_speech(adapted_spoken, max_chars=250)
 
         # Update persistent context memory
         try:
@@ -497,7 +566,7 @@ class CommandRouter:
         except Exception as e:
             logger.debug(f"Context update note: {e}")
 
-        return {
+        resp = {
             # Public standard fields
             "status": status,
             "message": final_message,
@@ -517,5 +586,12 @@ class CommandRouter:
             "detailedText": final_message,
             "toolResult": card.get("data") if card else None
         }
+
+        # Cache safe non-destructive responses for rapid sub-millisecond follow-ups
+        if status == "success" and not requires_approval and intent in ["live_info", "conversation", "system_app", "media_control"]:
+            cache_key = f"{query.lower().strip()}:False"
+            self._response_cache[cache_key] = (time.time(), resp)
+
+        return resp
 
 command_router = CommandRouter()
