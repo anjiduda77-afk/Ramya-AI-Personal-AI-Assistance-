@@ -25,7 +25,7 @@ class ScreenIntelligence:
     def capture(self, mode: str = "full_screen") -> Dict[str, Any]:
         """Captures screenshot using mss and returns file path & base64."""
         try:
-            with mss.mss() as sct:
+            with mss.MSS() as sct:
                 # Primary monitor
                 monitor = sct.monitors[1] if len(sct.monitors) > 1 else sct.monitors[0]
                 sct_img = sct.grab(monitor)

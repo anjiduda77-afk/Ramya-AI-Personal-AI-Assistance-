@@ -1,41 +1,83 @@
 /**
  * Real API client connecting Ramya AI frontend to the local FastAPI backend.
- * Never displays simulated or fake data.
+ * Conforms to strict frontend-backend isolation and clean public contracts.
  */
 
 const API_BASE = 'http://127.0.0.1:8000/api';
 
+export interface PublicSystemMetrics {
+  cpuPercent: number;
+  ramPercent: number;
+  batteryPercent?: number;
+  isOnline: boolean;
+}
+
 export interface HealthData {
-  status: string;
+  status: 'ready' | 'offline' | 'needs_attention';
   service: string;
   version: string;
-  localModelAvailable: boolean;
-  localModelName: string;
-  ollamaRunning: boolean;
-  cloudProviderConfigured: boolean;
-  cloudProviderName: string;
-  databaseConnected: boolean;
-  voiceEngineReady: boolean;
-  systemMetrics: {
-    cpuPercent: number;
-    ramPercent: number;
-    batteryPercent?: number;
-    isOnline: boolean;
-  };
+  isOnline: boolean;
+  voiceReady: boolean;
+  storageReady: boolean;
+  systemMetrics: PublicSystemMetrics;
+  
+  // Optional compatibility flags
+  localModelAvailable?: boolean;
+  ollamaRunning?: boolean;
+  cloudProviderConfigured?: boolean;
+  databaseConnected?: boolean;
+  voiceEngineReady?: boolean;
+}
+
+export interface PublicCard {
+  type: 'weather' | 'stock' | 'task' | 'reminder' | 'document' | 'screen' | 'quiz' | 'media';
+  title: string;
+  data: Record<string, any>;
+}
+
+export interface GroundedSource {
+  title: string;
+  reference?: string;
+  snippet?: string;
 }
 
 export interface AssistantResponse {
-  id: string;
-  query: string;
+  status: 'success' | 'needs_approval' | 'attention_required' | 'cancelled';
+  message: string;
+  spoken_response: string;
+  task_id: string;
   intent: string;
-  spokenResponse: string;
-  detailedText: string;
-  toolResult?: any;
-  providerUsed: string;
-  modelUsed: string;
-  isOffline: boolean;
-  executionTimeMs: number;
+  card?: PublicCard | null;
+  sources?: GroundedSource[];
+  requires_approval?: boolean;
+  approval_prompt?: string | null;
   timestamp: string;
+
+  // Compatibility properties
+  id?: string;
+  query?: string;
+  spokenResponse?: string;
+  detailedText?: string;
+  toolResult?: any;
+}
+
+export interface PrivacyPreferences {
+  offlineOnly: boolean;
+  cloudConsent: boolean;
+  voiceRetentionDays: number;
+  allowScreenAnalysis: boolean;
+}
+
+export interface DeveloperDiagnostics {
+  status: string;
+  internalProvider: string;
+  localModelName: string;
+  cloudProviderName: string;
+  databasePath: string;
+  recentAuditLogsCount: number;
+  cloudUsageTokens: number;
+  cloudUsageCostUsd: number;
+  memoryUsageMb: number;
 }
 
 export const api = {
@@ -184,12 +226,31 @@ export const api = {
     return res.json();
   },
 
-  async getAuditLogs() {
-    const res = await fetch(`${API_BASE}/security/audit-logs`);
+  // Privacy & Data Management
+  async getPrivacy(): Promise<PrivacyPreferences> {
+    const res = await fetch(`${API_BASE}/privacy`);
     return res.json();
   },
 
-  async getSettings() {
+  async updatePrivacy(preferences: Partial<PrivacyPreferences>) {
+    const res = await fetch(`${API_BASE}/privacy`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(preferences)
+    });
+    return res.json();
+  },
+
+  async purgeData(confirmed: boolean = true) {
+    const res = await fetch(`${API_BASE}/privacy/purge-data`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ confirmed })
+    });
+    return res.json();
+  },
+
+  async getSettings(): Promise<Record<string, string>> {
     const res = await fetch(`${API_BASE}/settings`);
     return res.json();
   },
@@ -201,5 +262,33 @@ export const api = {
       body: JSON.stringify(settings)
     });
     return res.json();
+  },
+
+  // Developer Access Gate
+  async unlockDeveloperMode(passcode: string): Promise<{ authenticated: boolean; token?: string }> {
+    const res = await fetch(`${API_BASE}/developer/unlock`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ passcode })
+    });
+    if (!res.ok) throw new Error('Developer authorization failed.');
+    return res.json();
+  },
+
+  async getDeveloperDiagnostics(token: string): Promise<DeveloperDiagnostics> {
+    const res = await fetch(`${API_BASE}/developer/diagnostics`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    if (!res.ok) throw new Error('Unauthorized.');
+    return res.json();
+  },
+
+  async getAuditLogs(): Promise<any[]> {
+    try {
+      const res = await fetch(`${API_BASE}/security/audit-logs`);
+      return res.json();
+    } catch {
+      return [];
+    }
   }
 };

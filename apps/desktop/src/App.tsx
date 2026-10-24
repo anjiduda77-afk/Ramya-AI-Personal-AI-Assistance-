@@ -10,27 +10,20 @@ import { CommandCenterScreen } from './screens/CommandCenterScreen';
 import { AiChatScreen } from './screens/AiChatScreen';
 import { ScreenIntelligenceScreen } from './screens/ScreenIntelligenceScreen';
 import { DocumentReaderScreen } from './screens/DocumentReaderScreen';
-import { VoiceLabScreen } from './screens/VoiceLabScreen';
-import { DesktopControlScreen } from './screens/DesktopControlScreen';
-import { MobileControlScreen } from './screens/MobileControlScreen';
 import { ProductivityScreen } from './screens/ProductivityScreen';
-import { KnowledgeBaseScreen } from './screens/KnowledgeBaseScreen';
-import { DataSqlScreen } from './screens/DataSqlScreen';
 import { WeatherMarketsScreen } from './screens/WeatherMarketsScreen';
 import { QuizLearningScreen } from './screens/QuizLearningScreen';
-import { AutomationCenterScreen } from './screens/AutomationCenterScreen';
-import { SecurityPermissionsScreen } from './screens/SecurityPermissionsScreen';
 import { SettingsDiagnosticsScreen } from './screens/SettingsDiagnosticsScreen';
 
 export const App: React.FC = () => {
   const [activeScreen, setActiveScreen] = useState<NavScreenId>('command_center');
-  const [orbState, setOrbState] = useState<OrbState>('idle');
+  const [orbState, setOrbState] = useState<OrbState>('ready');
   const [isFloatingMode, setIsFloatingMode] = useState<boolean>(false);
   const [health, setHealth] = useState<HealthData | null>(null);
   const [transcript, setTranscript] = useState<string>('Listening for "Hey Ramya"...');
 
   useEffect(() => {
-    // 1. Connect WebSocket
+    // 1. Connect WebSocket for live voice events
     wsService.connect();
     const unsubOrb = wsService.onOrbStateChange((state) => {
       setOrbState(state);
@@ -61,20 +54,20 @@ export const App: React.FC = () => {
       const h = await api.getHealth();
       setHealth(h);
     } catch (e) {
-      console.warn('Backend connection notice:', e);
+      console.warn('Backend connection notice');
     }
   };
 
   const triggerPushToTalk = () => {
-    if (orbState === 'idle') {
+    if (orbState === 'ready' || orbState === 'idle') {
       setOrbState('listening');
       setTranscript('Listening for Indian English voice command...');
       setTimeout(() => {
-        setOrbState('idle');
+        setOrbState('ready');
       }, 4000);
     } else {
       wsService.cancel();
-      setOrbState('idle');
+      setOrbState('ready');
     }
   };
 
@@ -88,26 +81,12 @@ export const App: React.FC = () => {
         return <ScreenIntelligenceScreen />;
       case 'document_reader':
         return <DocumentReaderScreen />;
-      case 'voice_lab':
-        return <VoiceLabScreen />;
-      case 'desktop_control':
-        return <DesktopControlScreen />;
-      case 'mobile_control':
-        return <MobileControlScreen />;
       case 'productivity':
         return <ProductivityScreen />;
-      case 'knowledge_base':
-        return <KnowledgeBaseScreen />;
-      case 'data_sql':
-        return <DataSqlScreen />;
       case 'weather_markets':
         return <WeatherMarketsScreen />;
       case 'quiz_learning':
         return <QuizLearningScreen />;
-      case 'automations':
-        return <AutomationCenterScreen />;
-      case 'security':
-        return <SecurityPermissionsScreen />;
       case 'settings':
         return <SettingsDiagnosticsScreen />;
       default:

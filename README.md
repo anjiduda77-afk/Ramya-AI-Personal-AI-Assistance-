@@ -2,51 +2,48 @@
 
 > **Tagline:** *"Your World. Your Voice. Your Control."*  
 > **Primary Wake Phrase:** `"Hey Ramya"` *(also responds to "Hello Ramya", "Ramya", "Okey Ramya")*  
-> **Language:** Indian English  
+> **Language:** Natural Indian English (`en-IN-NeerjaNeural` / Android TTS)  
 > **Target Platforms:** Windows Desktop & Android Mobile  
-> **Local LLM:** Ollama with Gemma 3 4B  
+> **Local Intelligence:** Ollama with Google Gemma 3 4B (Offline-First)  
+> **Cloud Intelligence:** Official OpenAI API Adapter (Opt-in Cloud Reasoning)  
+> **Security Architecture:** Strict Frontend-Backend Isolation & Central Permission Manager  
 
 ---
 
 ## 1. Product Overview
 
-**Ramya AI** is a production-oriented, voice-first personal AI assistant built from the ground up for Windows and Android. It unifies deterministic OS-level application control, document research with local vector retrieval (RAG), live weather/market telemetry, screen intelligence, and productivity management behind a futuristic, hacker-inspired Cyberpunk Command Center.
+**Ramya AI** is a production-oriented, voice-first personal AI assistant built for Windows and Android. It delivers an immersive, futuristic Cyberpunk Command Center combining local offline intelligence, local SQLite persistent storage, document research with grounded citations (RAG), screen intelligence, application launching, and productivity management.
 
-### Core Architectural Pillars
-- **Local-First AI:** Direct local inference via Ollama (`gemma3:4b`) ensures private offline conversation and document processing without unneeded cloud dependency.
-- **Deterministic Command Router:** Fast execution path (< 15ms) for system tasks, app launching, media controls, and weather lookups without unnecessary LLM hallucination risk or latency.
-- **Voice Pipeline:** Wake-word keyword spotting ("Hey Ramya"), voice activity detection (VAD), silence endpointing, speech recognition, and natural Indian English speech synthesis (`en-IN-NeerjaNeural`).
-- **Four-Tier Security:** Central Permission Manager enforcing Read-Only, Low-Risk, Medium-Risk, and High-Risk authorization gates with auditable execution logs.
-- **Cross-Platform:** Windows desktop application (React, TypeScript, Windows OS APIs) + Android native companion app (Kotlin, Jetpack Compose, foreground voice service, MediaProjection).
+### Architectural Pillars
+- **Strict Frontend-Backend Separation:** Internal prompts, model names, provider routing strategies, database schemas, and API secrets are strictly confined to the backend. The client receives clean, verified outcomes.
+- **Offline-First Intelligence:** Local inference with Gemma 3 4B via Ollama ensures private conversation, document understanding, and system execution with zero outbound transmissions.
+- **Deterministic Command Router:** Sub-15ms execution for system tasks, app launching, media controls, and weather lookups without unnecessary latency or hallucination risks.
+- **Natural Indian English Voice Engine:** Natural speech synthesis (`en-IN-NeerjaNeural`), wake-word spotting ("Hey Ramya"), push-to-talk (`Ctrl+Space`), and immediate speech interruption.
+- **Four-Tier Security:** Central Permission Manager enforcing Read-Only, Low-Risk, Medium-Risk, and High-Risk authorization gates with auditable execution logs and hard confirmation gates.
+- **Two-Layer Configuration & Developer Gate:** Public ordinary user preferences (voice, wake phrase, themes, privacy shield, data purge) are separated from developer diagnostics, which are protected behind a SHA-256 passcode gateway.
 
 ---
 
-## 2. Cyberpunk Command Center (15 Integrated Panels)
+## 2. Cyberpunk Command Center (User-Centric Architecture)
 
-1. **⚡ Command Center:** Central animated AI Orb (idle, listening, processing, speaking, verified, alert states), live speech transcription, weather radar, market watchlist, and pending tasks.
-2. **💬 AI Voice Chat:** Continuous conversation studio powered by Ollama Gemma 3 4B with speech synthesis.
-3. **👁️ Screen Intelligence:** Permission-controlled screenshot capture, active window detection, OCR text extraction, and contextual suggestions.
-4. **📄 Document Reader:** Parsing and text chunking for PDF, DOCX, PPTX presentations, spreadsheets, and markdown files.
-5. **🎙️ Voice Lab:** Acoustic studio with voice model selection, speech synthesis tester, and wake-phrase calibration.
-6. **🖥️ Desktop Control:** Allowlisted application launcher (Chrome, Notepad, VS Code, Calculator, Explorer, Terminal) and native media/volume controls.
-7. **📱 Mobile Control:** Android device status, telephony dialer intent (`ACTION_DIAL`), and companion link.
-8. **⏱️ Personal Productivity:** Daily tasks, reminders with schedule times, research notes, and focus planning.
-9. **🧠 Knowledge Base (RAG):** Grounded document retrieval with exact page/slide citations and similarity scoring.
-10. **🗄️ Data & SQL Explorer:** SQLite repository viewer, table inspector, and migration history.
-11. **📈 Weather & Markets:** Real-time global weather via Open-Meteo and live delayed stock quotes via Yahoo Finance.
-12. **🎓 Quiz & Learning:** Interactive voice and multiple-choice quizzes with instant grading and explanations.
-13. **⚙️ Automation Center:** Allowlisted multi-step routines with checkpoints and emergency stop kill switch.
-14. **🛡️ Security & Permissions:** 4-tier risk classification, confirmation gates, and immutable audit logs.
-15. **🔧 Settings & Diagnostics:** Wake phrase configuration, local model settings, and automated self-test diagnostics.
+1. **⚡ Command Center:** Central holographic AI Orb with reactive waveform pulses, live speech prompt, contextual action chips, ambient weather radar, and upcoming tasks.
+2. **💬 Voice & Chat Assistant:** Immersive conversational interface with natural Indian English speech synthesis, grounded document citations, and immediate cancellation.
+3. **👁️ Vision & Screen:** User-authorized screenshot capture, active window identification, OCR text extraction, and contextual recommendations.
+4. **📄 Document Studio:** Drag-and-drop parsing for PDF, DOCX, PPTX presentations, and CSV files with local vector retrieval (RAG) and exact page/slide citations.
+5. **⏱️ Productivity & Focus:** Daily agenda, priority task management, voice reminders, research notes, and focus timer.
+6. **📈 Live Radar:** Real-time global weather telemetry (Open-Meteo) and live delayed stock quotes (Yahoo Finance).
+7. **🎓 Learning & Quiz:** Interactive voice-enabled knowledge challenges and quizzes with instant grading and explanations.
+8. **⚙️ Preferences & Privacy:** Wake phrase selection, voice speed/pitch, cyberpunk themes, offline-only mode toggle, local data purging, and the protected Developer Gateway.
 
 ---
 
 ## 3. Technology Stack
 
-- **Shared Backend:** Python 3.14, FastAPI, Pydantic, SQLite with migrations, Edge-TTS, Faster-Whisper, MSS, Pillow, Pyperclip.
+- **Backend Core:** Python 3.14, FastAPI, Pydantic, SQLite with versioned migrations, Edge-TTS, Faster-Whisper, MSS, Pillow, Pyperclip.
 - **Desktop UI:** React 18, Vite, TypeScript, Cyberpunk Neon Design System, WebSockets.
-- **Android App:** Kotlin, Jetpack Compose, Android Foreground Microphone Service, MediaProjection Screen Capture.
+- **Android App:** Kotlin 2.0, Jetpack Compose, Android Foreground Microphone Service, MediaProjection Screen Capture.
 - **Local AI Engine:** Ollama with Google Gemma 3 4B.
+- **Cloud Intelligence:** Official OpenAI API with exponential backoff, rate limit handling, and token usage tracking.
 
 ---
 
@@ -61,10 +58,10 @@
 ### 1. Verify Local Ollama and Model
 ```powershell
 # Ensure Ollama is running
-ollama list
+ollama serve
 
-# If gemma3:4b is not yet downloaded:
-ollama run gemma3:4b "Say 'Ramya AI online'"
+# Verify Gemma 3 4B is installed
+ollama list
 ```
 
 ### 2. Backend Setup
@@ -77,6 +74,7 @@ python -m pip install -r requirements.txt
 ```powershell
 cd apps/desktop
 npm install
+npm run build
 ```
 
 ---
@@ -90,40 +88,41 @@ npm install
 
 ### Option B: Manual Service Launch
 ```powershell
-# Terminal 1: Backend API
+# Terminal 1: Backend API (FastAPI)
 cd services/assistant-api
-python -m uvicorn main:app --host 127.0.0.1 --port 8000 --reload
+python -m uvicorn main:app --host 127.0.0.1 --port 8000
 
-# Terminal 2: Desktop Command Center
+# Terminal 2: Desktop Command Center (Vite)
 cd apps/desktop
 npm run dev
 ```
 
-- **Desktop UI:** `http://127.0.0.1:5173`
-- **Backend API & Swagger Docs:** `http://127.0.0.1:8000/docs`
-- **Health Endpoint:** `http://127.0.0.1:8000/api/health`
-
 ---
 
-## 6. Running Automated Tests
+## 6. Verification and Testing
 
-All automated tests verify real services, SQLite schemas, command routing, security permissions, document chunking, and speech synthesis:
-
+### Run Backend Unit & Integration Tests (21/21 Passing)
 ```powershell
-# Run backend pytest suite (21 unit & integration tests)
-$env:PYTHONPATH = "services/assistant-api"
 python -m pytest services/assistant-api/tests -v
+```
 
-# Run desktop UI build verification
+### Build Desktop Production Distribution
+```powershell
 cd apps/desktop
 npm run build
 ```
 
+### Secret Scan Frontend Distribution Bundle
+```powershell
+powershell -Command "Select-String -Path 'dist\assets\*.js' -Pattern 'gemma3', 'sk-' -SimpleMatch"
+```
+*(Confirms zero leaked credentials or internal prompts in client code.)*
+
 ---
 
-## 7. Security and Privacy Policy
+## 7. Security and Documentation Reference
 
-1. **Local-First Execution:** Your personal voice audio and indexed documents are processed locally. Documents are never uploaded to third-party cloud services without explicit configuration.
-2. **Deterministic Allowlist:** Shell commands and dangerous OS operations are restricted to verified allowlisted applications. Model output is treated as untrusted data and cannot override application permission gates.
-3. **Four-Tier Permission Model:** High-risk actions (initiating phone calls, deleting tasks/documents) strictly require interactive confirmation from the user.
-4. **Emergency Stop:** Immediate kill switch available in the Automation Center and via voice command ("Stop speaking", "Stop listening").
+- **[SECURITY.md](file:///c:/mern%20stack/mernpro/ramya/SECURITY.md):** Complete threat model, permission tiers, desktop allowlist, and data isolation specs.
+- **[PLATFORM_SUPPORT.md](file:///c:/mern%20stack/mernpro/ramya/PLATFORM_SUPPORT.md):** Platform matrices, offline capabilities, and hardware requirements.
+- **[IMPLEMENTATION_STATUS.md](file:///c:/mern%20stack/mernpro/ramya/IMPLEMENTATION_STATUS.md):** Feature implementation and milestone tracking.
+- **[TEST_REPORT.md](file:///c:/mern%20stack/mernpro/ramya/TEST_REPORT.md):** Detailed automated test logs, build metrics, and live execution audits.

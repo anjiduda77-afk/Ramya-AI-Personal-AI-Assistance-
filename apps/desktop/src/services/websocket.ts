@@ -2,7 +2,22 @@
  * WebSocket manager for live voice sessions, transcription, and orb state synchronization.
  */
 
-export type OrbState = 'idle' | 'listening' | 'processing' | 'speaking' | 'success' | 'error';
+export type OrbState =
+  | 'ready'
+  | 'idle'
+  | 'listening'
+  | 'understanding'
+  | 'working'
+  | 'processing'
+  | 'reading_doc'
+  | 'analyzing_screen'
+  | 'waiting_approval'
+  | 'speaking'
+  | 'completed'
+  | 'success'
+  | 'cancelled'
+  | 'needs_attention'
+  | 'error';
 
 class WebSocketService {
   private ws: WebSocket | null = null;

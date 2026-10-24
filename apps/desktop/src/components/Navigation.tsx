@@ -5,16 +5,9 @@ export type NavScreenId =
   | 'ai_chat'
   | 'screen_intel'
   | 'document_reader'
-  | 'voice_lab'
-  | 'desktop_control'
-  | 'mobile_control'
   | 'productivity'
-  | 'knowledge_base'
-  | 'data_sql'
   | 'weather_markets'
   | 'quiz_learning'
-  | 'automations'
-  | 'security'
   | 'settings';
 
 interface NavigationProps {
@@ -38,21 +31,14 @@ export const Navigation: React.FC<NavigationProps> = ({
   onToggleFloating
 }) => {
   const navItems: NavItem[] = [
-    { id: 'command_center', label: '1. Command Center', icon: '⚡' },
-    { id: 'ai_chat', label: '2. AI Voice Chat', icon: '💬' },
-    { id: 'screen_intel', label: '3. Screen Intelligence', icon: '👁️' },
-    { id: 'document_reader', label: '4. Document Reader', icon: '📄' },
-    { id: 'voice_lab', label: '5. Voice Lab', icon: '🎙️' },
-    { id: 'desktop_control', label: '6. Desktop Control', icon: '🖥️' },
-    { id: 'mobile_control', label: '7. Mobile Control', icon: '📱' },
-    { id: 'productivity', label: '8. Personal Productivity', icon: '⏱️' },
-    { id: 'knowledge_base', label: '9. Knowledge Base (RAG)', icon: '🧠' },
-    { id: 'data_sql', label: '10. Data & SQL Explorer', icon: '🗄️' },
-    { id: 'weather_markets', label: '11. Weather & Markets', icon: '📈' },
-    { id: 'quiz_learning', label: '12. Quiz & Learning', icon: '🎓' },
-    { id: 'automations', label: '13. Automation Center', icon: '⚙️' },
-    { id: 'security', label: '14. Security & Permissions', icon: '🛡️' },
-    { id: 'settings', label: '15. Settings & Diagnostics', icon: '🔧' }
+    { id: 'command_center', label: 'Command Center', icon: '⚡' },
+    { id: 'ai_chat', label: 'Voice & Chat', icon: '💬' },
+    { id: 'screen_intel', label: 'Vision & Screen', icon: '👁️' },
+    { id: 'document_reader', label: 'Document Studio', icon: '📄' },
+    { id: 'productivity', label: 'Productivity & Focus', icon: '⏱️' },
+    { id: 'weather_markets', label: 'Live Radar', icon: '📈' },
+    { id: 'quiz_learning', label: 'Learning & Quiz', icon: '🎓' },
+    { id: 'settings', label: 'Preferences & Privacy', icon: '⚙️' }
   ];
 
   return (
@@ -67,12 +53,12 @@ export const Navigation: React.FC<NavigationProps> = ({
       overflowY: 'auto'
     }}>
       {/* Primary Floating Orb View Toggle */}
-      <div style={{ marginBottom: '16px' }}>
+      <div style={{ marginBottom: '18px' }}>
         <button
           onClick={onToggleFloating}
           style={{
             width: '100%',
-            background: isFloatingMode ? 'var(--neon-cyan)' : 'rgba(0, 240, 255, 0.1)',
+            background: isFloatingMode ? 'var(--neon-cyan)' : 'rgba(0, 240, 255, 0.08)',
             color: isFloatingMode ? '#000' : 'var(--neon-cyan)',
             border: '1px solid var(--neon-cyan)',
             padding: '10px',
@@ -90,7 +76,7 @@ export const Navigation: React.FC<NavigationProps> = ({
           }}
         >
           <span>🔮</span>
-          <span>{isFloatingMode ? 'EXIT ORB MODE' : 'FLOATING ORB MODE'}</span>
+          <span>{isFloatingMode ? 'EXPAND DASHBOARD' : 'COMPACT ORB MODE'}</span>
         </button>
       </div>
 
@@ -99,13 +85,14 @@ export const Navigation: React.FC<NavigationProps> = ({
         fontWeight: 700,
         color: 'var(--text-dim)',
         letterSpacing: '1.5px',
-        paddingLeft: '8px',
-        marginBottom: '10px'
+        textTransform: 'uppercase',
+        marginBottom: '10px',
+        paddingLeft: '8px'
       }}>
-        NAVIGATION CONSOLE
+        ASSISTANT PANELS
       </div>
 
-      {/* Nav List */}
+      {/* Navigation Links */}
       <nav style={{ display: 'flex', flexDirection: 'column', gap: '4px', flex: 1 }}>
         {navItems.map((item) => {
           const isActive = activeScreen === item.id;
@@ -116,37 +103,69 @@ export const Navigation: React.FC<NavigationProps> = ({
               style={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: '10px',
-                padding: '9px 12px',
+                justifyContent: 'space-between',
+                padding: '10px 14px',
+                borderRadius: '8px',
                 background: isActive ? 'rgba(0, 240, 255, 0.12)' : 'transparent',
-                border: '1px solid',
-                borderColor: isActive ? 'var(--neon-cyan)' : 'transparent',
-                borderRadius: '6px',
+                border: isActive ? '1px solid rgba(0, 240, 255, 0.4)' : '1px solid transparent',
                 color: isActive ? 'var(--neon-cyan)' : 'var(--text-muted)',
-                fontFamily: 'Rajdhani, sans-serif',
-                fontSize: '0.85rem',
-                fontWeight: isActive ? 700 : 600,
                 cursor: 'pointer',
                 textAlign: 'left',
-                transition: 'all 0.15s ease'
+                transition: 'all 0.15s ease',
+                fontFamily: 'Rajdhani, sans-serif',
+                fontSize: '0.9rem',
+                fontWeight: isActive ? 700 : 500,
+                letterSpacing: '0.5px'
+              }}
+              onMouseEnter={(e) => {
+                if (!isActive) {
+                  e.currentTarget.style.background = 'rgba(255, 255, 255, 0.04)';
+                  e.currentTarget.style.color = '#fff';
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (!isActive) {
+                  e.currentTarget.style.background = 'transparent';
+                  e.currentTarget.style.color = 'var(--text-muted)';
+                }
               }}
             >
-              <span>{item.icon}</span>
-              <span style={{ flex: 1 }}>{item.label}</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <span style={{ fontSize: '1.05rem' }}>{item.icon}</span>
+                <span>{item.label}</span>
+              </div>
+              {item.badge && (
+                <span style={{
+                  fontSize: '0.65rem',
+                  background: 'var(--neon-cyan)',
+                  color: '#000',
+                  padding: '1px 6px',
+                  borderRadius: '10px',
+                  fontWeight: 700
+                }}>
+                  {item.badge}
+                </span>
+              )}
             </button>
           );
         })}
       </nav>
 
-      {/* Footer Info */}
+      {/* Bottom Privacy Status Banner */}
       <div style={{
-        paddingTop: '12px',
-        borderTop: '1px solid rgba(255,255,255,0.06)',
-        fontSize: '0.7rem',
-        color: 'var(--text-dim)',
-        textAlign: 'center'
+        marginTop: 'auto',
+        padding: '12px',
+        borderRadius: '8px',
+        background: 'rgba(10, 15, 29, 0.8)',
+        border: '1px solid rgba(0, 240, 255, 0.1)',
+        fontSize: '0.72rem',
+        color: 'var(--text-muted)'
       }}>
-        Wake Word: "Hey Ramya"
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--neon-green)', fontWeight: 700, marginBottom: '4px' }}>
+          <span>🛡️</span>
+          <span>Privacy Shield Active</span>
+        </div>
+        <div>Local processing prioritized. No data shared without consent.</div>
       </div>
     </aside>
   );

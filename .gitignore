@@ -3,12 +3,27 @@ node_modules/
 __pycache__/
 *.py[cod]
 *$py.class
-*.env
-.env.local
 .venv/
 env/
 venv/
 ENV/
+
+# Environment Variables & Secrets
+.env
+.env.*
+!.env.example
+*.env
+*.pem
+*.key
+*.keystore
+*.jks
+*.p12
+*.pfx
+
+# Testing & Coverage
+.pytest_cache/
+.coverage
+htmlcov/
 
 # Distribution & Build
 dist/
@@ -23,11 +38,14 @@ target/
 *.sqlite
 *.sqlite3
 *.db
+*.db-shm
+*.db-wal
 !data/migrations/*.sql
 storage/uploads/
 storage/vectors/
 storage/recordings/
 storage/screenshots/
+storage/backups/
 
 # IDE & OS
 .vscode/
@@ -36,6 +54,8 @@ storage/screenshots/
 *.swo
 .DS_Store
 Thumbs.db
+desktop.ini
+*.tmp
 
 # Android
 .gradle/

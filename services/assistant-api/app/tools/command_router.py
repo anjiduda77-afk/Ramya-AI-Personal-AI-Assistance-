@@ -1,11 +1,13 @@
 """
 Deterministic Smart Command Router for Ramya AI.
 Dispatches voice and text commands to allowlisted local tools or the local LLM.
+Returns clean public response schemas conforming to the PublicAssistantResponse contract.
 """
 import re
 import time
+import uuid
 import logging
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from datetime import datetime
 from app.voice.wake_word import wake_word_detector
 from app.security.permissions import permissions, PermissionTier
@@ -19,6 +21,8 @@ from app.providers.router import router
 
 logger = logging.getLogger("ramya.tools.router")
 
+STOP_WORDS = {"for", "to", "me", "today", "tomorrow", "this", "that", "the", "a", "an", "is", "it", "my", "your", "now", "please"}
+
 class CommandRouter:
     async def route_and_execute(
         self,
@@ -28,9 +32,10 @@ class CommandRouter:
     ) -> Dict[str, Any]:
         """
         Processes and routes a voice or text command.
-        Returns a structured response conforming to the AssistantResponse contract.
+        Returns a clean public response without internal implementation leaks.
         """
         start_time = time.time()
+        task_id = f"task-{uuid.uuid4().hex[:10]}"
         
         # 1. Wake word extraction & normalization
         has_wake_word, wake_phrase, query = wake_word_detector.detect_in_text(raw_query)
@@ -39,19 +44,15 @@ class CommandRouter:
 
         # If query is empty after wake word (e.g. user just said "Hey Ramya")
         if not clean_q or clean_q in ["hey", "hello", "hi"]:
-            return {
-                "id": str(int(time.time() * 1000)),
-                "query": raw_query,
-                "intent": "conversation",
-                "spokenResponse": "Yes! I am listening. How can I help you?",
-                "detailedText": "Ramya AI is online and listening. Speak a command or ask a question.",
-                "toolResult": None,
-                "providerUsed": "deterministic_router",
-                "modelUsed": "router-core",
-                "isOffline": False,
-                "executionTimeMs": int((time.time() - start_time) * 1000),
-                "timestamp": datetime.now().isoformat()
-            }
+            spoken = "Yes! I am listening. How can I help you?"
+            return self._build_response(
+                task_id=task_id,
+                query=raw_query,
+                intent="conversation",
+                spoken=spoken,
+                message="Ramya is ready and listening. Speak a command or question.",
+                status="success"
+            )
 
         # 2. Fast Deterministic Matchers
 
@@ -69,12 +70,27 @@ class CommandRouter:
         for pat, action in media_patterns.items():
             if re.search(pat, lower_q):
                 tool_res = desktop_control.media_control(action)
-                spoken = f"Media {action.replace('_', ' ')}."
-                return self._build_response(clean_q, "media_control", spoken, tool_res["message"], tool_res, start_time)
+                action_clean = action.replace('_', ' ')
+                spoken = f"Media {action_clean}."
+                return self._build_response(
+                    task_id=task_id,
+                    query=clean_q,
+                    intent="media_control",
+                    spoken=spoken,
+                    message=tool_res.get("message", f"Media {action_clean} completed."),
+                    card={"type": "media", "title": f"Media {action_clean.capitalize()}", "data": tool_res}
+                )
 
         # Stop speaking / listening
         if re.search(r"\b(stop\s+speaking|shut\s+up|be\s+quiet|stop\s+talking)\b", lower_q):
-            return self._build_response(clean_q, "media_control", "Speech stopped.", "Playback cancelled.", {"action": "stop_speaking"}, start_time)
+            return self._build_response(
+                task_id=task_id,
+                query=clean_q,
+                intent="media_control",
+                spoken="Speech stopped.",
+                message="Playback cancelled.",
+                status="cancelled"
+            )
 
         # --- B. Application Launching ---
         app_patterns = [
@@ -91,21 +107,55 @@ class CommandRouter:
             if re.search(pat, lower_q):
                 is_allowed, reason, tier = permissions.validate_action("open_application", {"app_name": app_key}, is_user_confirmed)
                 if not is_allowed:
-                    return self._build_response(clean_q, "system_app", reason, reason, {"success": False, "requiresConfirmation": True}, start_time)
+                    user_msg = "Please allow access before I continue."
+                    return self._build_response(
+                        task_id=task_id,
+                        query=clean_q,
+                        intent="system_app",
+                        spoken=user_msg,
+                        message=user_msg,
+                        status="needs_approval",
+                        requires_approval=True,
+                        approval_prompt=f"Approve launching {app_key.capitalize()}?"
+                    )
                 
                 tool_res = desktop_control.open_app(app_key)
-                spoken = f"Opening {app_key.capitalize()}." if tool_res["success"] else f"Could not open {app_key}."
-                return self._build_response(clean_q, "system_app", spoken, tool_res.get("message", ""), tool_res, start_time)
+                spoken = f"{app_key.capitalize()} is ready." if tool_res["success"] else f"Could not open {app_key}."
+                return self._build_response(
+                    task_id=task_id,
+                    query=clean_q,
+                    intent="system_app",
+                    spoken=spoken,
+                    message=spoken,
+                    status="success" if tool_res["success"] else "attention_required"
+                )
 
         # --- C. Screen Intelligence ---
         if re.search(r"\b(analyze|analyse|read|inspect|what\s+is\s+on)\s+(the\s+|my\s+)?screen\b|\btake\s+(a\s+)?screenshot\b", lower_q):
             is_allowed, reason, tier = permissions.validate_action("capture_screen", {}, is_user_confirmed)
             if not is_allowed:
-                return self._build_response(clean_q, "screen_analysis", reason, reason, {"success": False}, start_time)
+                user_msg = "Please allow screen access before I continue."
+                return self._build_response(
+                    task_id=task_id,
+                    query=clean_q,
+                    intent="screen_analysis",
+                    spoken=user_msg,
+                    message=user_msg,
+                    status="needs_approval",
+                    requires_approval=True,
+                    approval_prompt="Allow Ramya AI to capture and inspect the active screen?"
+                )
             
             analysis = screen_intelligence.analyze_screen()
             spoken = f"Screen captured. You are currently viewing {analysis['active_window']}."
-            return self._build_response(clean_q, "screen_analysis", spoken, analysis["summary"], analysis, start_time)
+            return self._build_response(
+                task_id=task_id,
+                query=clean_q,
+                intent="screen_analysis",
+                spoken=spoken,
+                message=analysis.get("summary", spoken),
+                card={"type": "screen", "title": "Screen Insights", "data": analysis}
+            )
 
         # --- D. Live Weather ---
         weather_match = re.search(r"\b(weather|temperature)\b(?:\s+in\s+([a-zA-Z\s]+))?", lower_q)
@@ -113,100 +163,178 @@ class CommandRouter:
             city = weather_match.group(2) or "Hyderabad"
             w_res = await live_data.get_weather(city.strip())
             spoken = w_res.get("message", "Unable to retrieve weather.")
-            return self._build_response(clean_q, "live_info", spoken, spoken, w_res, start_time)
+            return self._build_response(
+                task_id=task_id,
+                query=clean_q,
+                intent="live_info",
+                spoken=spoken,
+                message=spoken,
+                card={"type": "weather", "title": f"Weather in {city.strip().capitalize()}", "data": w_res}
+            )
 
-        # --- E. Stock Market Quotes ---
-        stock_match = re.search(r"\b(stock|price|quote|shares?\s+of)\s+([a-zA-Z0-9\.\^]+)\b", lower_q)
+        # --- E. Stock Market Quotes (Precise Financial Matcher) ---
+        stock_match = re.search(
+            r"\b(?:stock\s+price|market\s+price|share\s+price|shares?\s+of)\s+(?:for\s+)?([a-zA-Z0-9\.\^]+)\b|"
+            r"\b(?:stock|quote)\s+(?:for\s+|of\s+)?([A-Z0-9\.\^]{2,8})\b|"
+            r"\bprice\s+of\s+([a-zA-Z0-9\.\^]+)\s+(?:stock|shares?)\b",
+            clean_q
+        )
         if stock_match:
-            symbol = stock_match.group(2).upper()
-            if not symbol.endswith(".NS") and symbol in ["RELIANCE", "TCS", "INFY", "WIPRO", "HDFC"]:
-                symbol = f"{symbol}.NS"
-            s_res = await live_data.get_stock_quote(symbol)
-            spoken = s_res.get("message", "Market data unavailable.")
-            return self._build_response(clean_q, "live_info", spoken, spoken, s_res, start_time)
+            symbol_raw = stock_match.group(1) or stock_match.group(2) or stock_match.group(3)
+            if symbol_raw and symbol_raw.lower() not in STOP_WORDS:
+                symbol = symbol_raw.upper()
+                if not symbol.endswith(".NS") and symbol in ["RELIANCE", "TCS", "INFY", "WIPRO", "HDFC"]:
+                    symbol = f"{symbol}.NS"
+                s_res = await live_data.get_stock_quote(symbol)
+                spoken = s_res.get("message", "Market data unavailable.")
+                return self._build_response(
+                    task_id=task_id,
+                    query=clean_q,
+                    intent="live_info",
+                    spoken=spoken,
+                    message=spoken,
+                    card={"type": "stock", "title": f"{symbol} Quote", "data": s_res}
+                )
 
         # --- F. Productivity: Tasks, Reminders & Daily Summary ---
         if re.search(r"\b(show|view|list)\s+(my\s+)?(tasks|to\s*dos)\b", lower_q):
             tasks = productivity.list_tasks()
             pending = sum(1 for t in tasks if not t["is_completed"])
             spoken = f"You have {pending} pending task{'s' if pending != 1 else ''}."
-            return self._build_response(clean_q, "productivity", spoken, f"Total tasks: {len(tasks)}", {"tasks": tasks}, start_time)
+            return self._build_response(
+                task_id=task_id,
+                query=clean_q,
+                intent="productivity",
+                spoken=spoken,
+                message=f"Total tasks: {len(tasks)}",
+                card={"type": "task", "title": "Your Tasks", "data": {"tasks": tasks}}
+            )
 
         task_create_match = re.search(r"\b(add|create)\s+task\s+(.+)", clean_q, re.IGNORECASE)
         if task_create_match:
             task_title = task_create_match.group(2).strip()
             res = productivity.create_task(title=task_title)
             spoken = f"Task added: {task_title}."
-            return self._build_response(clean_q, "productivity", spoken, res["message"], res, start_time)
+            return self._build_response(
+                task_id=task_id,
+                query=clean_q,
+                intent="productivity",
+                spoken=spoken,
+                message=res.get("message", spoken),
+                card={"type": "task", "title": "Task Created", "data": res}
+            )
 
         reminder_match = re.search(r"\bremind\s+me\s+to\s+(.+?)(?:\s+at\s+(.+))?$", clean_q, re.IGNORECASE)
         if reminder_match:
             text = reminder_match.group(1).strip()
             trig_time = reminder_match.group(2).strip() if reminder_match.group(2) else "7:00 PM"
-            res = productivity.set_reminder(text, trig_time)
-            spoken = f"Reminder set for {text} at {trig_time}."
-            return self._build_response(clean_q, "productivity", spoken, res["message"], res, start_time)
+            res = productivity.set_reminder(text=text, trigger_time=trig_time)
+            spoken = f"Reminder set: {text} at {trig_time}."
+            return self._build_response(
+                task_id=task_id,
+                query=clean_q,
+                intent="productivity",
+                spoken=spoken,
+                message=res.get("message", spoken),
+                card={"type": "reminder", "title": "Reminder Scheduled", "data": res}
+            )
 
         if re.search(r"\b(daily\s+plan|daily\s+summary|plan\s+for\s+today)\b", lower_q):
             summary = productivity.get_daily_summary()
             spoken = summary["message"]
-            return self._build_response(clean_q, "productivity", spoken, spoken, summary, start_time)
+            return self._build_response(
+                task_id=task_id,
+                query=clean_q,
+                intent="productivity",
+                spoken=spoken,
+                message=spoken,
+                card={"type": "task", "title": "Daily Plan", "data": summary}
+            )
 
         # --- G. Quiz & Learning ---
         if re.search(r"\b(start|take|run)\s+(a\s+)?quiz\b|\bquiz\s+me\b", lower_q):
             questions = quiz_manager.get_questions()
             spoken = "Starting quiz. Here is your first question."
-            return self._build_response(clean_q, "quiz_learning", spoken, "Quiz mode activated.", {"questions": questions}, start_time)
+            return self._build_response(
+                task_id=task_id,
+                query=clean_q,
+                intent="quiz_learning",
+                spoken=spoken,
+                message="Quiz mode activated.",
+                card={"type": "quiz", "title": "Interactive Quiz", "data": {"questions": questions}}
+            )
 
         # --- H. Grounded Document Search (RAG) ---
         if re.search(r"\b(search\s+documents|in\s+my\s+documents|from\s+the\s+pdf|document\s+search)\b", lower_q):
             rag_res = await rag_engine.answer_query(clean_q)
             spoken = rag_res["answer"]
-            return self._build_response(clean_q, "document_task", spoken, rag_res["answer"], rag_res, start_time, provider="rag")
+            sources = []
+            for c in rag_res.get("citations", []):
+                ref = f"Page {c.get('pageOrSlideNumber', 1)}" if c.get("pageOrSlideNumber") else None
+                sources.append({
+                    "title": c.get("filename", "Document"),
+                    "reference": ref,
+                    "snippet": c.get("snippet", "")
+                })
+            return self._build_response(
+                task_id=task_id,
+                query=clean_q,
+                intent="document_task",
+                spoken=spoken,
+                message=spoken,
+                sources=sources,
+                card={"type": "document", "title": "Document Insights", "data": rag_res}
+            )
 
-        # --- I. General Conversational Question: Local Gemma 3 4B via Ollama ---
+        # --- I. General Conversational Intelligence: Local First ---
         response_text, provider_name, model_name, is_offline = await router.generate(clean_q)
         
         # Keep spoken response concise (first 2 sentences) while detailed text contains full answer
         sentences = [s.strip() for s in re.split(r"(?<=[.!?])\s+", response_text) if s.strip()]
         spoken = " ".join(sentences[:2]) if len(sentences) > 2 else response_text
 
-        return {
-            "id": str(int(time.time() * 1000)),
-            "query": raw_query,
-            "intent": "conversation",
-            "spokenResponse": spoken,
-            "detailedText": response_text,
-            "toolResult": None,
-            "providerUsed": provider_name,
-            "modelUsed": model_name,
-            "isOffline": is_offline,
-            "executionTimeMs": int((time.time() - start_time) * 1000),
-            "timestamp": datetime.now().isoformat()
-        }
+        return self._build_response(
+            task_id=task_id,
+            query=raw_query,
+            intent="conversation",
+            spoken=spoken,
+            message=response_text,
+            status="success"
+        )
 
     def _build_response(
         self,
+        task_id: str,
         query: str,
         intent: str,
         spoken: str,
-        detailed: str,
-        tool_result: Dict[str, Any],
-        start_time: float,
-        provider: str = "deterministic_router"
+        message: str,
+        status: str = "success",
+        card: Optional[Dict[str, Any]] = None,
+        sources: Optional[List[Dict[str, Any]]] = None,
+        requires_approval: bool = False,
+        approval_prompt: Optional[str] = None
     ) -> Dict[str, Any]:
+        """Builds clean public response schema without internal secrets or execution traces."""
         return {
-            "id": str(int(time.time() * 1000)),
-            "query": query,
+            # Public standard fields
+            "status": status,
+            "message": message,
+            "spoken_response": spoken,
+            "task_id": task_id,
             "intent": intent,
+            "card": card,
+            "sources": sources or [],
+            "requires_approval": requires_approval,
+            "approval_prompt": approval_prompt,
+            "timestamp": datetime.now().isoformat(),
+
+            # Backward compatibility fields for legacy views & tests
+            "id": task_id,
+            "query": query,
             "spokenResponse": spoken,
-            "detailedText": detailed,
-            "toolResult": tool_result,
-            "providerUsed": provider,
-            "modelUsed": "local-router",
-            "isOffline": False,
-            "executionTimeMs": int((time.time() - start_time) * 1000),
-            "timestamp": datetime.now().isoformat()
+            "detailedText": message,
+            "toolResult": card.get("data") if card else None
         }
 
 command_router = CommandRouter()

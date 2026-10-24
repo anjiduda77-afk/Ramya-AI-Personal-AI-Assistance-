@@ -57,6 +57,22 @@ app.include_router(api_router, prefix="/api")
 # Mount WebSocket endpoint
 app.add_api_websocket_route("/ws/assistant", websocket_endpoint)
 
+# Global safe exception handler: prevents internal stack traces from leaking to client
+from fastapi import Request
+from fastapi.responses import JSONResponse
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    logger.error(f"Unhandled server exception on {request.url.path}: {exc}")
+    return JSONResponse(
+        status_code=500,
+        content={
+            "status": "attention_required",
+            "message": "I encountered an issue processing your request. Please try again shortly.",
+            "spoken_response": "I encountered an issue processing your request. Please try again."
+        }
+    )
+
 @app.get("/")
 async def root():
     return {

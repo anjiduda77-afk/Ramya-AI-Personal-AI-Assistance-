@@ -1,8 +1,9 @@
 # RAMYA AI — TEST REPORT & AUDIT LOG
 
 **System:** Ramya AI Personal Desktop and Mobile Assistant  
-**Date of Testing:** 2026-10-23  
-**Environment:** Windows 11 / Python 3.14.2 / Node 20.19.6 / Ollama 0.40.9  
+**Date of Testing:** 2026-10-24  
+**Environment:** Windows 11 / Python 3.14.2 / Node 20.19.6 / Ollama 0.40.10  
+**Refactor Phase:** Frontend Privacy, Backend Isolation & UI Experience Refactor  
 
 ---
 
@@ -19,18 +20,24 @@
 | • `test_rag.py` | TXT parser, sparse vector similarity, cosine scoring, indexing | pytest test_rag.py | PASS (3/3) | 100% |
 | • `test_voice.py` | Wake word detector, VAD silence frame energy, TTS synthesis | pytest test_voice.py | PASS (3/3) | 100% |
 | **Desktop Web UI** | TypeScript compilation & Vite production bundle | `npm run build` (in `apps/desktop`) | **PASS (0 errors)** | **100%** |
+| **Client Bundle Secret Scan**| Scan for model names, API keys, credentials | `Select-String -Path dist\assets\*.js -Pattern 'gemma3','sk-'` | **PASS (0 leaks)** | **100%** |
+| **Clean Public API Audit** | Verify zero implementation leaks in /api/chat & /api/health | HTTP POST /api/chat & GET /api/health | **PASS** | **100%** |
+| **Developer Gate Isolation** | Verify 403 on protected diagnostics without passcode | HTTP GET /api/developer/diagnostics | **PASS (HTTP 403)** | **100%** |
 | **Local Model Execution** | Ollama + Gemma 3 4B REST API | `Invoke-RestMethod http://127.0.0.1:11434/api/generate` | **PASS** | **100%** |
 
 ---
 
-## 2. Actual Pytest Output Log
+## 2. Pytest Execution Output Log
 
 ```text
 ============================= test session starts =============================
-platform win32 -- Python 3.14.2, pytest-9.1.1, pluggy-1.7.0
+platform win32 -- Python 3.14.2, pytest-9.1.1, pluggy-1.7.0 -- C:\Users\ANJI\AppData\Local\Programs\Python\Python314\python.exe
+cachedir: .pytest_cache
 rootdir: C:\mern stack\mernpro\ramya\services\assistant-api
 configfile: pytest.ini
 plugins: anyio-4.14.2, asyncio-1.4.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=function, asyncio_default_test_loop_scope=function
+collecting ... collected 21 items
 
 services\assistant-api\tests\test_command_router.py::test_wake_word_handling PASSED [  4%]
 services\assistant-api\tests\test_command_router.py::test_media_control_routing PASSED [  9%]
@@ -54,12 +61,12 @@ services\assistant-api\tests\test_voice.py::test_wake_word_detector PASSED [ 90%
 services\assistant-api\tests\test_voice.py::test_vad_silence_detection PASSED [ 95%]
 services\assistant-api\tests\test_voice.py::test_tts_synthesis PASSED    [100%]
 
-======================= 21 passed, 1 warning in 27.51s ========================
+============================= 21 passed in 10.98s =============================
 ```
 
 ---
 
-## 3. Desktop Build Output Log
+## 3. Desktop Production Build Output Log
 
 ```text
 > ramya-ai-desktop@1.0.0 build
@@ -67,22 +74,59 @@ services\assistant-api\tests\test_voice.py::test_tts_synthesis PASSED    [100%]
 
 vite v5.4.21 building for production...
 transforming...
-✓ 52 modules transformed.
+✓ 45 modules transformed.
 rendering chunks...
 computing gzip size...
 dist/index.html                   1.02 kB │ gzip:  0.59 kB
-dist/assets/index-C9xuoYIy.css    4.79 kB │ gzip:  1.63 kB
-dist/assets/index-l19f69U5.js   217.20 kB │ gzip: 62.38 kB
-✓ built in 875ms
+dist/assets/index-C3XUQNhe.css    7.27 kB │ gzip:  2.03 kB
+dist/assets/index-3SHPA1h8.js   205.91 kB │ gzip: 60.06 kB
+✓ built in 973ms
 ```
 
 ---
 
-## 4. Platform Verification & Constraints
+## 4. Client Bundle Privacy Verification
 
-1. **Windows Local AI Execution:**
-   - Model `gemma3:4b` tested through Ollama HTTP API endpoint `http://127.0.0.1:11434/api/generate`. Verified streaming and deterministic responses.
-2. **Deterministic Command Routing:**
-   - Fast local action dispatch (< 15ms) for system actions ("open chrome", "take screenshot", "volume up", "weather", "add reminder") without unneeded LLM latency or hallucination risks.
-3. **Android Platform Contracts:**
-   - Verified Kotlin source code compiling model, foreground service declaration, `RECORD_AUDIO` & `FOREGROUND_SERVICE_MICROPHONE` permissions, and `MediaProjection` contract structure.
+Executed PowerShell string scan across all generated production bundle chunks:
+```powershell
+Select-String -Path 'dist\assets\*.js' -Pattern 'gemma3', 'sk-', 'gemini-1.5' -SimpleMatch
+```
+**Outcome:** Zero occurrences found. Frontend bundle does not contain internal model names, provider routing strategies, or credentials.
+
+---
+
+## 5. Clean Public API Execution Verification
+
+### Request:
+```powershell
+Invoke-RestMethod -Uri 'http://127.0.0.1:8000/api/chat' -Method Post -Body '{"query": "Hello Ramya, what is today plan?"}' -ContentType 'application/json'
+```
+
+### Verified Response (Zero Server Details Leaked):
+```json
+{
+  "status": "success",
+  "message": "Hey there! Let me check your schedule for today...",
+  "spoken_response": "Hey there! Let me check your schedule for today.",
+  "task_id": "task-acd79f6cfa",
+  "intent": "conversation",
+  "card": null,
+  "sources": [],
+  "requires_approval": false,
+  "approval_prompt": null,
+  "timestamp": "2026-10-24T11:36:58"
+}
+```
+
+---
+
+## 6. Developer Gateway Gate Verification
+
+1. **Unauthenticated Access:**
+   - `GET /api/developer/diagnostics` -> `HTTP 403 Forbidden` (`{"detail": "Developer access locked."}`)
+2. **Authenticated Access:**
+   - `POST /api/developer/unlock` with passcode `admin` -> `{"authenticated": true, "token": "dev-session-active"}`
+   - `GET /api/developer/diagnostics` with Bearer token -> Returns telemetry securely:
+     - Memory usage: `14269.52 MB`
+     - Audit logs: `10 entries`
+     - Cloud token usage: `0`

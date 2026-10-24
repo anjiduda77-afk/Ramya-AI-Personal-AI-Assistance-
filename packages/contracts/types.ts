@@ -1,10 +1,33 @@
 /**
- * RAMYA AI — SHARED SYSTEM CONTRACTS
- * Defines all cross-platform interfaces, enums, states, and API contracts.
+ * RAMYA AI — SHARED SYSTEM CONTRACTS & CLEAN PUBLIC API SCHEMAS
+ * Enforces strict frontend-backend isolation. Public contracts expose only
+ * user-facing statuses, natural responses, and formatted cards without
+ * internal prompts, model names, provider routing, or database connection details.
  */
 
-// 1. Assistant State & Voice Engine
-export type OrbState = 'idle' | 'listening' | 'processing' | 'speaking' | 'success' | 'error';
+// 1. User-Facing Assistant States & Orb Dynamics
+export type UserFacingStatus =
+  | 'ready'
+  | 'listening'
+  | 'understanding'
+  | 'working'
+  | 'reading_doc'
+  | 'analyzing_screen'
+  | 'waiting_approval'
+  | 'speaking'
+  | 'completed'
+  | 'cancelled'
+  | 'needs_attention';
+
+// Backward compatibility alias for legacy components
+export type OrbState =
+  | 'idle'
+  | 'listening'
+  | 'processing'
+  | 'speaking'
+  | 'success'
+  | 'error'
+  | UserFacingStatus;
 
 export type PermissionLevel = 'read_only' | 'low_risk' | 'medium_risk' | 'high_risk';
 
@@ -12,6 +35,7 @@ export interface VoiceStatus {
   isListening: boolean;
   isSpeaking: boolean;
   orbState: OrbState;
+  userFacingStatus: UserFacingStatus;
   wakeWordDetected: boolean;
   activeLanguage: string;
   transcript: string;
@@ -19,7 +43,7 @@ export interface VoiceStatus {
   volumeLevel: number;
 }
 
-// 2. Command Router & Intent Classification
+// 2. Command Intents & Request Schemas
 export type IntentType =
   | 'system_app'
   | 'screen_analysis'
@@ -38,32 +62,47 @@ export interface CommandRequest {
   confirmed?: boolean;
 }
 
-export interface ToolExecutionResult {
-  toolName: string;
-  success: boolean;
+// 3. User-Facing Response Cards & Grounded Sources
+export interface PublicCard {
+  type: 'weather' | 'stock' | 'task' | 'reminder' | 'document' | 'screen' | 'quiz' | 'media';
+  title: string;
+  data: Record<string, any>;
+}
+
+export interface GroundedSource {
+  title: string;
+  reference?: string; // e.g., "Page 3" or "Slide 4"
+  snippet?: string;
+}
+
+/**
+ * Clean Public Assistant Response
+ * Exposes only verified, user-centric outcomes without backend implementation leaks.
+ */
+export interface PublicAssistantResponse {
+  status: 'success' | 'needs_approval' | 'attention_required' | 'cancelled';
   message: string;
-  data?: Record<string, any>;
-  requiresConfirmation?: boolean;
-  permissionLevel: PermissionLevel;
-  error?: string;
-  timestamp: string;
-}
-
-export interface AssistantResponse {
-  id: string;
-  query: string;
+  spoken_response: string;
+  task_id: string;
   intent: IntentType;
-  spokenResponse: string;
-  detailedText: string;
-  toolResult?: ToolExecutionResult;
-  providerUsed: 'ollama' | 'cloud' | 'deterministic_router';
-  modelUsed: string;
-  isOffline: boolean;
-  executionTimeMs: number;
+  card?: PublicCard;
+  sources?: GroundedSource[];
+  requires_approval?: boolean;
+  approval_prompt?: string;
   timestamp: string;
+
+  // Compatibility fields for existing views
+  id?: string;
+  query?: string;
+  spokenResponse?: string;
+  detailedText?: string;
+  toolResult?: any;
 }
 
-// 3. Screen Intelligence
+// Alias for general assistant response
+export type AssistantResponse = PublicAssistantResponse;
+
+// 4. Screen Intelligence (User-Facing)
 export interface ScreenAnalysisRequest {
   mode: 'full_screen' | 'active_window' | 'selection';
   prompt?: string;
@@ -73,17 +112,12 @@ export interface ScreenAnalysisResult {
   timestamp: string;
   activeWindowName: string;
   extractedText: string;
-  uiElements: Array<{
-    type: string;
-    text: string;
-    bounds?: [number, number, number, number];
-  }>;
   summary: string;
   suggestedActions: string[];
   screenshotBase64?: string;
 }
 
-// 4. Documents & RAG Knowledge Base
+// 5. Document & Knowledge RAG
 export interface DocumentMetadata {
   id: string;
   filename: string;
@@ -109,7 +143,7 @@ export interface RAGQueryResponse {
   sufficientEvidence: boolean;
 }
 
-// 5. Personal Productivity
+// 6. Productivity Items
 export interface TaskItem {
   id: string;
   title: string;
@@ -136,7 +170,7 @@ export interface NoteItem {
   updatedAt: string;
 }
 
-// 6. Live Information: Weather & Stocks
+// 7. Live Weather & Stocks
 export interface WeatherData {
   location: string;
   temperatureC: number;
@@ -161,26 +195,45 @@ export interface StockQuote {
   provider: string;
 }
 
-// 7. System Health & Diagnostics
-export interface ServiceHealth {
-  status: 'healthy' | 'degraded' | 'offline';
-  localModelAvailable: boolean;
-  localModelName: string;
-  ollamaRunning: boolean;
-  cloudProviderConfigured: boolean;
-  cloudProviderName: string;
-  databaseConnected: boolean;
-  voiceEngineReady: boolean;
+// 8. Public Service Health (No Internal Secrets / Model Names Leaked)
+export interface PublicServiceHealth {
+  status: 'ready' | 'offline' | 'needs_attention';
+  service: string;
+  version: string;
+  isOnline: boolean;
+  voiceReady: boolean;
+  storageReady: boolean;
   systemMetrics: {
     cpuPercent: number;
     ramPercent: number;
     batteryPercent?: number;
     isOnline: boolean;
   };
-  timestamp: string;
+  timestamp?: string;
+
+  // Compatibility fields (optional, sanitized)
+  localModelAvailable?: boolean;
+  ollamaRunning?: boolean;
+  cloudProviderConfigured?: boolean;
+  databaseConnected?: boolean;
+  voiceEngineReady?: boolean;
 }
 
-// 8. Quiz & Learning
+export type HealthData = PublicServiceHealth;
+
+// 9. Developer-Only Diagnostics (Protected & Admin Only)
+export interface DeveloperDiagnostics {
+  status: string;
+  internalProvider: string;
+  localModelName: string;
+  cloudProviderName: string;
+  databasePath: string;
+  uptimeSeconds: number;
+  recentAuditLogsCount: number;
+  memoryUsageMb: number;
+}
+
+// 10. Quiz & Interactive Learning
 export interface QuizQuestion {
   id: string;
   question: string;
