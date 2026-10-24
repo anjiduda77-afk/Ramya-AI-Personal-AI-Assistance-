@@ -10,8 +10,9 @@
 
 | Capability ID | Name & Description | Supported Platforms | Min OS Version | Required OS Permissions | Processing Mode | Risk Tier | Requires Confirmation | Default State | Fallback Behavior |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **`microphone`** | Capture audio for speech recognition and wake-word | Windows, Android, Web | Windows 10 / Android 8+ | `RECORD_AUDIO`, `windows.microphone` | Local | Low Risk | No | **Enabled** | Fallback to keyboard text input |
-| **`speech_recognition`** | Continuous Whisper STT & VAD | Windows, Android, Web | Windows 10 / Android 8+ | `RECORD_AUDIO` | Local | Low Risk | No | **Enabled** | Fallback to Web Speech API or text |
+| **`microphone`** | Capture audio for speech recognition and live voice input | Windows, Android, Web | Windows 10 / Android 8+ | `RECORD_AUDIO`, `MODIFY_AUDIO_SETTINGS` | Local | Low Risk | No | **Enabled** | Fallback to keyboard text input |
+| **`speech_output`** | Synthesize voice speech output (Ramya's Mouth) via native TTS | Windows, Android, Web | Windows 10 / Android 8+ | `TTS_SERVICE` query, `MODIFY_AUDIO_SETTINGS` | Local | Low Risk | No | **Enabled** | Text-only bubble in UI |
+| **`haptic_feedback`**| Tactile vibration on mic start/stop and voice interaction | Android | Android 8+ | `VIBRATE` | Local | Low Risk | No | **Enabled** | Silent visual indicator |
 | **`screen_analysis`** | Active window title and authorized screen OCR | Windows | Windows 10 (19041+) | `windows.screen_capture` | Local | Medium Risk | No | **Enabled** | Report screen analysis disabled |
 | **`camera_vision`** | Camera photo capture & document OCR | Windows, Android | Windows 10 / Android 9+ | `android.permission.CAMERA` | Local | Medium Risk | No | **Disabled** | Prompt user to enable camera |
 | **`file_system`** | Local document search & indexing (PDF, DOCX, TXT) | Windows, Android | Windows 10 / Android 10+ | `READ_MEDIA_DOCUMENTS` | Local | Read-Only | No | **Enabled** | Search web or memory only |

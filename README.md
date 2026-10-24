@@ -12,9 +12,9 @@
 
 ## 📥 Android Mobile App Download (Version 1.0.0)
 
-| Package Format | Version | Status | Package Name | Direct APK Download Link | Size |
+| Package Format | Version | Status | Package Name | Direct APK Download Link | Features Included |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **Android APK** | **v1.0.0** | 🟢 **Stable Release** | `ai.ramya.assistant` | [⬇️ Download ramya-ai-v1.0.0.apk (Direct)](https://github.com/anjiduda77-afk/Ramya-AI-Personal-AI-Assistance-/raw/main/releases/ramya-ai-v1.0.0.apk) | 11.5 MB |
+| **Android APK** | **v1.0.0** | 🟢 **Stable Release** | `ai.ramya.assistant` | [⬇️ Download ramya-ai-v1.0.0.apk (Direct)](https://github.com/anjiduda77-afk/Ramya-AI-Personal-AI-Assistance-/raw/main/releases/ramya-ai-v1.0.0.apk) | 🎙️ Real Mic Input, 🔊 TTS Mouth Voice Output, ⚡ OpenAI & DeepSeek Reasoning, ☁️ Firebase & Supabase Sync |
 
 ### 📲 How to Install the APK on Your Android Phone:
 

@@ -127,7 +127,17 @@ fun PermissionOnboardingScreen(onProceed: () -> Unit) {
             }
         )
 
-        Spacer(modifier = Modifier.height(40.dp))
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Hardware Feature Card 4: Voice Speech Output & Haptics
+        PermissionCard(
+            title = "Audio Output (Mouth Engine) & Haptics",
+            description = "Text-to-speech engine, audio routing, and tactile response are automatically active and ready.",
+            isGranted = true,
+            onGrantClick = {}
+        )
+
+        Spacer(modifier = Modifier.height(32.dp))
 
         Button(
             onClick = onProceed,
