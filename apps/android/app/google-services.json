@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "693743485680",
+    "project_id": "ramya-ai-b22e4",
+    "storage_bucket": "ramya-ai-b22e4.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:693743485680:android:9ae48ae8c059a8be52b835",
+        "android_client_info": {
+          "package_name": "ai.ramya.assistant"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDpd1kyBomaJugqLEKrooX6zq-8qG7cQZ8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
