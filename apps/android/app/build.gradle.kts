@@ -1,8 +1,17 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("com.google.gms.google-services")
 }
+
+val localProperties = Properties()
+val localPropertiesFile = rootProject.file("local.properties")
+if (localPropertiesFile.exists()) {
+    localProperties.load(localPropertiesFile.inputStream())
+}
+val openRouterKey: String = localProperties.getProperty("OPENROUTER_KEY", "")
 
 android {
     namespace = "ai.ramya.assistant"
@@ -14,6 +23,8 @@ android {
         targetSdk = 34
         versionCode = 1
         versionName = "1.0.0"
+
+        buildConfigField("String", "OPENROUTER_KEY", "\"$openRouterKey\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -39,6 +50,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
     composeOptions {
         kotlinCompilerExtensionVersion = "1.5.14"
