@@ -59,7 +59,9 @@ fun PermissionOnboardingScreen(onProceed: () -> Unit) {
         modifier = Modifier
             .fillMaxSize()
             .background(CyberpunkBackground)
-            .padding(24.dp)
+            .statusBarsPadding()
+            .navigationBarsPadding()
+            .padding(horizontal = 20.dp, vertical = 16.dp)
             .verticalScroll(rememberScrollState()),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
