@@ -12,6 +12,52 @@
 
 ---
 
+## 📥 Downloads & Version Releases
+
+Download the official Ramya AI builds for your devices. Android APK releases are versioned and can be downloaded directly over Wi-Fi, installed via USB ADB, or retrieved from GitHub Releases.
+
+### 📱 Android APK Version Archive
+
+| Version | Release Date | Status | Package Name | APK Download Link | Size | SHA-256 Checksum | Min Requirements |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **v1.0.0** | 2026-10-24 | 🟢 **Latest Stable** | `ai.ramya.assistant` | [Download ramya-ai-v1.0.0.apk](https://github.com/anjiduda77-afk/Ramya-AI-Personal-AI-Assistance-/releases/download/v1.0.0/ramya-ai-v1.0.0.apk) | 10.4 MB | `0135490CE6BCA8F9A52D602ECAEE37F5F134DC521618DFA67EAB2F8C4F39D168` | Android 8.0+ (API 26) |
+
+#### 🌟 What's New in Version 1.0.0 (First Official Release):
+- **Firebase & Google Services**: Integrated `google-services.json` for Firebase Project `ramya-ai-b22e4`.
+- **Hybrid Cloud Sync**: Supabase `@supabase/server` sync outbox with verified JWT credentials.
+- **Voice-First AI**: Foreground continuous listening service on Android + floating cyberpunk orb on Windows.
+- **Offline & Cloud Intelligence**: Gemma 3 4B (Ollama) with automatic failover to Google Gemini, OpenAI, and xAI Grok.
+- **Telugu-to-English Tutor**: Conversational Telugu voice translation and spaced repetition learning cards.
+- **Personal Memory Vault**: User-controlled SQLite storage with full privacy and zero model leakage.
+
+---
+
+### 📲 How to Download & Install on Your Phone
+
+#### Method 1: Direct Wi-Fi Download (No USB Required)
+1. Run the local download server on your computer:
+   ```powershell
+   python scripts/serve_apk.py
+   ```
+2. On your phone's browser (Chrome / Samsung Internet), navigate to:
+   ```text
+   http://172.21.210.153:8888/ramya-ai-v1.0.0.apk
+   ```
+   *(Or open `http://172.21.210.153:8888/` on your computer and scan the QR code with your phone camera).*
+3. When prompted, tap **"Download Anyway"** and tap the downloaded file to install.
+
+#### Method 2: Local Vite Development Server Download
+When running the desktop application (`npm run dev` in `apps/desktop`):
+- Direct Browser URL: [`http://localhost:5173/ramya-ai-v1.0.0.apk`](http://localhost:5173/ramya-ai-v1.0.0.apk)
+
+#### Method 3: USB ADB One-Click Install
+Connect your phone with USB debugging enabled and run:
+```powershell
+adb install -r "apps\android\app\build\outputs\apk\debug\app-debug.apk"
+```
+
+---
+
 ## 1. Product Overview
 
 **Ramya AI** is a personalised, production-grade personal assistant designed for Windows and Android. It merges local offline intelligence, user-controlled memory, adaptive English tutoring, legal music playback, live weather, real-time web search, document research with grounded citations (RAG), and system automation into one unified assistant.

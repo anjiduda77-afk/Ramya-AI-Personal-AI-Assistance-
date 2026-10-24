@@ -20,14 +20,14 @@ def get_ip():
 
 class ApkDownloadHandler(http.server.BaseHTTPRequestHandler):
     def do_HEAD(self):
-        if self.path in ["/download", "/ramya-ai.apk", "/app-debug.apk"]:
+        if self.path in ["/download", "/ramya-ai.apk", "/ramya-ai-v1.0.0.apk", "/app-debug.apk"]:
             if not APK_PATH.exists():
                 self.send_error(404, "APK not found on host machine.")
                 return
             size = APK_PATH.stat().st_size
             self.send_response(200)
             self.send_header("Content-Type", "application/vnd.android.package-archive")
-            self.send_header("Content-Disposition", 'attachment; filename="RamyaAI-Assistant.apk"')
+            self.send_header("Content-Disposition", 'attachment; filename="RamyaAI-Assistant-v1.0.0.apk"')
             self.send_header("Content-Length", str(size))
             self.end_headers()
         else:
@@ -36,7 +36,7 @@ class ApkDownloadHandler(http.server.BaseHTTPRequestHandler):
             self.end_headers()
 
     def do_GET(self):
-        if self.path in ["/download", "/ramya-ai.apk", "/app-debug.apk"]:
+        if self.path in ["/download", "/ramya-ai.apk", "/ramya-ai-v1.0.0.apk", "/app-debug.apk"]:
             if not APK_PATH.exists():
                 self.send_error(404, "APK not found on host machine.")
                 return
@@ -44,7 +44,7 @@ class ApkDownloadHandler(http.server.BaseHTTPRequestHandler):
             size = APK_PATH.stat().st_size
             self.send_response(200)
             self.send_header("Content-Type", "application/vnd.android.package-archive")
-            self.send_header("Content-Disposition", 'attachment; filename="RamyaAI-Assistant.apk"')
+            self.send_header("Content-Disposition", 'attachment; filename="RamyaAI-Assistant-v1.0.0.apk"')
             self.send_header("Content-Length", str(size))
             self.end_headers()
             
