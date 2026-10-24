@@ -14,22 +14,23 @@
 
 | Package Format | Version | Status | Package Name | Direct APK Download Link | Size |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **Android APK** | **v1.0.0** | 🟢 **Stable Release** | `ai.ramya.assistant` | [Download ramya-ai-v1.0.0.apk](https://github.com/anjiduda77-afk/Ramya-AI-Personal-AI-Assistance-/releases/download/v1.0.0/ramya-ai-v1.0.0.apk) | 11.5 MB |
+| **Android APK** | **v1.0.0** | 🟢 **Stable Release** | `ai.ramya.assistant` | [⬇️ Download ramya-ai-v1.0.0.apk (Direct)](https://github.com/anjiduda77-afk/Ramya-AI-Personal-AI-Assistance-/raw/main/releases/ramya-ai-v1.0.0.apk) | 11.5 MB |
 
 ### 📲 How to Install the APK on Your Android Phone:
 
-#### Method 1: Instant Wi-Fi / Hotspot Download (Easiest)
-1. Open this link directly in your phone's browser (Chrome or Samsung Internet):
-   ```text
-   http://172.21.210.153:8888/ramya-ai-v1.0.0.apk
-   ```
-2. Or open `http://172.21.210.153:8888/` on your computer and scan the QR code with your phone camera.
-3. Tap **"Download Anyway"** and tap the downloaded file to install on your phone.
+#### Method 1: Direct GitHub One-Tap Download (Works Worldwide — Recommended)
+Tap this link from your phone's browser (Chrome / Samsung Internet):
+👉 **[Download ramya-ai-v1.0.0.apk Directly from GitHub](https://github.com/anjiduda77-afk/Ramya-AI-Personal-AI-Assistance-/raw/main/releases/ramya-ai-v1.0.0.apk)**
 
-#### Method 2: Direct USB Install (Instant)
+#### Method 2: Local Wi-Fi / Hotspot Download
+If your phone is on the same Wi-Fi network as this computer:
+- Phone URL: `http://172.21.210.153:8888/ramya-ai-v1.0.0.apk`
+- Or open `http://172.21.210.153:8888/` on your computer and scan the QR code with your phone camera.
+
+#### Method 3: Direct USB Install (Instant)
 Connect your phone with a USB cable (USB Debugging enabled) and run:
 ```powershell
-adb install -r "apps\android\app\build\outputs\apk\debug\app-debug.apk"
+adb install -r "releases\ramya-ai-v1.0.0.apk"
 ```
 
 ---
