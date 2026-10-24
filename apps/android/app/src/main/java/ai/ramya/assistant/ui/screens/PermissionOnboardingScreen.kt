@@ -43,6 +43,17 @@ fun PermissionOnboardingScreen(onProceed: () -> Unit) {
         )
     }
 
+    var hasContactsPermission by remember {
+        mutableStateOf(
+            ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED
+        )
+    }
+    var hasCallPermission by remember {
+        mutableStateOf(
+            ContextCompat.checkSelfPermission(context, Manifest.permission.CALL_PHONE) == PackageManager.PERMISSION_GRANTED
+        )
+    }
+
     val micLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { granted ->
@@ -53,6 +64,18 @@ fun PermissionOnboardingScreen(onProceed: () -> Unit) {
         contract = ActivityResultContracts.RequestPermission()
     ) { granted ->
         hasNotificationPermission = granted
+    }
+
+    val contactsLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        hasContactsPermission = granted
+    }
+
+    val callLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        hasCallPermission = granted
     }
 
     Column(
@@ -94,7 +117,31 @@ fun PermissionOnboardingScreen(onProceed: () -> Unit) {
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Permission Card 2: Notifications
+        // Permission Card 2: Contacts Resolution
+        PermissionCard(
+            title = "Contacts Directory Access",
+            description = "Enables commands like 'Call Dad' and 'Find contact Rahul' to resolve contact phone numbers safely.",
+            isGranted = hasContactsPermission,
+            onGrantClick = {
+                contactsLauncher.launch(Manifest.permission.READ_CONTACTS)
+            }
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Permission Card 3: Direct Phone Calling
+        PermissionCard(
+            title = "Direct Calling Permission",
+            description = "Allows initiating confirmed calls directly. If not granted, Ramya safely opens the system dialler.",
+            isGranted = hasCallPermission,
+            onGrantClick = {
+                callLauncher.launch(Manifest.permission.CALL_PHONE)
+            }
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Permission Card 4: Notifications
         PermissionCard(
             title = "Foreground Service Notifications",
             description = "Maintains persistent system visibility and background listening status.",
@@ -108,7 +155,7 @@ fun PermissionOnboardingScreen(onProceed: () -> Unit) {
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Permission Card 3: Floating Overlay
+        // Permission Card 5: Floating Overlay
         val hasOverlay = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             Settings.canDrawOverlays(context)
         } else true
@@ -129,7 +176,7 @@ fun PermissionOnboardingScreen(onProceed: () -> Unit) {
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Hardware Feature Card 4: Voice Speech Output & Haptics
+        // Hardware Feature Card 6: Voice Speech Output & Haptics
         PermissionCard(
             title = "Audio Output (Mouth Engine) & Haptics",
             description = "Text-to-speech engine, audio routing, and tactile response are automatically active and ready.",

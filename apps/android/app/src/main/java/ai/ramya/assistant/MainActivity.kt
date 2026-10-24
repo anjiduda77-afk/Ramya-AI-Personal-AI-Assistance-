@@ -42,7 +42,11 @@ import androidx.core.content.ContextCompat
 import kotlinx.coroutines.launch
 import ai.ramya.assistant.data.CloudManager
 import ai.ramya.assistant.intents.AppLauncherIntent
+import ai.ramya.assistant.intents.AppLauncherManager
+import ai.ramya.assistant.intents.ContactCallManager
 import ai.ramya.assistant.intents.DialerIntent
+import ai.ramya.assistant.intents.MusicPlaybackManager
+import ai.ramya.assistant.orchestrator.AssistantOrchestrator
 import ai.ramya.assistant.service.RamyaVoiceForegroundService
 import ai.ramya.assistant.ui.screens.PermissionOnboardingScreen
 import ai.ramya.assistant.ui.theme.*
@@ -148,14 +152,14 @@ fun AndroidCommandCenter(onOpenPermissions: () -> Unit) {
         userTranscript = clean
         voiceEngine.stopListening()
         isThinking = true
-        assistantResponse = "Thinking..."
+        assistantResponse = "Processing..."
 
         coroutineScope.launch {
-            val response = CloudManager.askRamya(clean)
-            assistantResponse = response
+            val response = AssistantOrchestrator.processQuery(context, clean)
+            assistantResponse = response.displayText
             isThinking = false
             // Ramya speaks the response aloud through native TTS mouth
-            voiceEngine.speak(response)
+            voiceEngine.speak(response.spokenText)
         }
     }
 
@@ -1089,7 +1093,7 @@ fun AccountAndCloudTab(
 
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(
-                onClick = { AppLauncherIntent.launchApp(context, "chrome") },
+                onClick = { AppLauncherManager.openApp(context, "chrome") },
                 colors = ButtonDefaults.buttonColors(containerColor = CyberpunkCard),
                 shape = RoundedCornerShape(10.dp),
                 modifier = Modifier
@@ -1099,7 +1103,7 @@ fun AccountAndCloudTab(
                 Text("🌐 Chrome", color = NeonCyan, fontSize = 12.sp)
             }
             Button(
-                onClick = { AppLauncherIntent.launchApp(context, "youtube") },
+                onClick = { AppLauncherManager.openApp(context, "youtube") },
                 colors = ButtonDefaults.buttonColors(containerColor = CyberpunkCard),
                 shape = RoundedCornerShape(10.dp),
                 modifier = Modifier

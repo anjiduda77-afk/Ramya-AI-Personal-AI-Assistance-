@@ -10,11 +10,10 @@
     "indexes": "firestore.indexes.json"
   },
   "hosting": {
-    "public": "apps/desktop/dist",
+    "public": "public",
     "ignore": [
       "firebase.json",
-      "**/.*",
-      "**/node_modules/**"
+      "**/.*"
     ],
     "rewrites": [
       {

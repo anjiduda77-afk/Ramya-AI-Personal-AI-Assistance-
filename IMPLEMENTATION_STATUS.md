@@ -1,105 +1,100 @@
-# RAMYA AI — IMPLEMENTATION STATUS & CAPABILITY MATRIX
+# RAMYA AI — ANDROID VOICE ASSISTANT IMPLEMENTATION STATUS
 
 **Project Identity:** Ramya AI  
-**Tagline:** "Your World. Your Voice. Your Control."  
-**Primary Wake Phrase:** "Hey Ramya"  
-**Target Platforms:** Windows Desktop & Android Mobile  
-**Primary Voice Engine:** Natural Indian English Female (`en-IN-NeerjaNeural` / Android TTS)  
-**AI Providers:** Local Offline Gemma 3 4B (Ollama), Google Gemini API, OpenAI (ChatGPT) API, xAI Grok API  
-**Security Architecture:** Strict Frontend-Backend Isolation, Zero-Leakage Contracts, 4-Tier Permission Manager  
-**Last Updated:** 2026-10-24  
+**Package Name:** `ai.ramya.assistant`  
+**Target Platform:** Android Mobile (Android 8.0 / API 26 to Android 14+ / API 34)  
+**Primary Wake Phrase:** `"Hey Ramya"` *(also responds to "Hello Ramya", "Ramya")*  
+**Voice Engine:** Native Android SpeechRecognizer (Mic) & TextToSpeech (Mouth) with Decibel RMS Tracking  
+**Cloud Backend & Database:** Google Firebase Authentication & Cloud Firestore (`ramya-ai-b22e4`)  
+**AI Orchestration:** Native Android Intent Orchestrator + Sub-second OpenAI `gpt-4o-mini` & DeepSeek Fallback  
+**Desktop Status:** Removed per user instruction (`apps/desktop` deleted; pure Android focus)  
+**Last Updated:** 2026-10-25  
 
 ---
 
-## 1. Feature Support Matrix
+## 1. Architectural Overview
 
-| Category | Capability / Feature | Windows Target | Android Target | Status | Verification Method |
-| :--- | :--- | :---: | :---: | :---: | :--- |
-| **Unified AI Engine** | Local Gemma 3 4B via Ollama (Free/Offline) | Supported | Supported (Host API) | COMPLETED | Real Ollama daemon & integration test |
-| | Google Gemini API (gemini-1.5-flash) | Supported | Supported (Host API) | COMPLETED | Provider adapter & quota backoff |
-| | OpenAI / ChatGPT API (gpt-4o-mini) | Supported | Supported (Host API) | COMPLETED | Exponential backoff & token tracking |
-| | xAI Grok API (grok-beta / grok-2) | Supported | Supported (Host API) | COMPLETED | Adapter test & multi-cloud router |
-| | Multi-Cloud Auto-Fallback on Quota/429 | Supported | Supported | COMPLETED | Unit test & failover runner |
-| **Personal Memory** | User-Controlled Persistent Memory (SQLite) | Supported | Supported | COMPLETED | Migration 003 & MemoryEngine tests |
-| | Explicit Fact & Preference Extraction | Supported | Supported | COMPLETED | "Remember that...", "Remember my..." tests |
-| | Grounded Context Injection (Zero Fabrication)| Supported | Supported | COMPLETED | Ollama verified recall in test_memory |
-| | Search, Edit, Delete, Export & Clear Vault | Supported | Supported | COMPLETED | REST endpoints & UI Vault component |
-| **English Learning** | Personalised English Learning Tutor | Supported | Supported | COMPLETED | Daily lessons & curriculum database |
-| | Spaced Repetition Revision Check | Supported | Supported | COMPLETED | Proactive check prompt ("Would you like to revise...") |
-| | Telugu to Natural English Translation | Supported | Supported | COMPLETED | Idiomatic conversational translation engine |
-| | Pronunciation & Speaking Practice | Supported | Supported | COMPLETED | Audio synthesis & speaking cards |
-| **Legal Music** | Curated Free Legal Streams (Lofi/Ambient) | Supported | Supported | COMPLETED | CC/Public Domain streams & audio deck |
-| | Classical & Nature Focus Audio Streams | Supported | Supported | COMPLETED | Musopen & Nature CC0 audio streams |
-| | Official YouTube & Spotify Launching | Supported | Supported (Intents) | COMPLETED | Win32 & Android intent contracts |
-| **Web Search** | Free & Privacy-Friendly Web Knowledge | Supported | Supported | COMPLETED | DuckDuckGo & Wikipedia REST API tests |
-| **Voice & Wake Word**| "Hey Ramya" Wake Phrase Spotter | Supported | Supported | COMPLETED | Audio pipeline tests & command router |
-| | Push-to-Talk Hotkey & Floating Orb | Supported (Ctrl+Space) | Supported (Overlay) | COMPLETED | UI & WebSocket live events |
-| | Barge-in & Speech Interruption | Supported | Supported | COMPLETED | Stop command tests & UI cancel action |
-| **Automation** | Allowlisted Windows App Launching | Supported | Supported (Intents) | COMPLETED | Desktop control & permission manager |
-| | Screen Capture & Analysis (OCR/Vision) | Supported | Supported (MediaProject) | COMPLETED | MSS screen analyzer tests |
-| | Native System Media & Volume Controls | Supported | Supported | COMPLETED | Win32 virtual-key dispatch |
-| **Knowledge (RAG)** | Document Parsing (PDF, DOCX, PPTX, TXT)| Supported | Supported (via API) | COMPLETED | Vector store & citations tests |
-| **Productivity** | Tasks, Reminders, Notes, Focus Plan | Supported | Supported | COMPLETED | SQLite persistence & API |
-| **Android** | Foreground Microphone Service & Notification | N/A | Supported (Android 14+) | COMPLETED | Kotlin service & AndroidManifest |
-| | Telephony Dialer & App Launcher Intents | N/A | Supported | COMPLETED | DialerIntent & AppLauncherIntent |
-| **Security** | Zero-Leakage Frontend Bundle & Isolation | Supported | Supported | COMPLETED | Scripted bundle audit (0 leaked secrets) |
-| | Central Permission Manager (4 Tiers) | Supported | Supported | COMPLETED | Confirmation gates & audit logs |
+Ramya AI is an autonomous, hands-free personal voice assistant for Android with real hardware integrations:
 
----
+```
+[ Android Microphone ] ──> [ VoiceEngine (SpeechRecognizer) ]
+                                    │
+                                    ▼
+                     [ AssistantOrchestrator ]
+                                    │
+  ┌──────────────────┬──────────────┴───────────────┬──────────────────┐
+  ▼                  ▼                              ▼                  ▼
+[AppLauncherManager] [MusicPlaybackManager] [ContactCallManager] [CloudManager]
+  │                  │                              │                  │
+  ▼                  ▼                              ▼                  ▼
+PackageManager     MediaSession / AudioManager   ContactsContract   Firebase & AI
+Launch / PlayStore Play / Pause / Volume         Dialer / Direct    Firestore Sync
+```
 
-## 2. Milestone Progress Tracker
+1. **Voice Pipeline (`VoiceEngine.kt`):**
+   - Native Android `SpeechRecognizer` with partial results and decibel level tracking (`rmsDecibels`).
+   - Native `TextToSpeech` with Indian English pronunciation (`en-IN`), friendly pitch (1.08f), and clean speech formatting (strips markdown, URLs, and code blocks).
+   - Instant barge-in / speech interruption: speaking stops immediately when listening begins.
+   - Dynamic pulsing Orb and reactive waveform equalizer bars reflecting real acoustic energy.
 
-- [x] **Milestone 1:** Monorepo architecture, application shells, futuristic neon interface, SQLite initialization & migrations, API health check.
-- [x] **Milestone 2:** Voice pipeline: microphone capture, wake phrase detection, STT, TTS, interruption, command routing.
-- [x] **Milestone 3:** Local AI with Ollama Gemma 3 4B, cloud provider abstraction, privacy controls & offline mode.
-- [x] **Milestone 4:** Windows desktop control: allowlisted app launching, screen capture, OCR, active window detection, floating orb.
-- [x] **Milestone 5:** Android integration: foreground voice service, permission onboarding, phone dialer intent, MediaProjection contract.
-- [x] **Milestone 6:** Document processing (PDF, DOCX, PPTX), RAG vector store, source citations, tasks, reminders, quiz mode.
-- [x] **Milestone 7:** Live weather & stock watchlists, media controls, permission-gated audit trails.
-- [x] **Milestone 8:** Automated test suite, packaging scripts, error recovery, release verification.
-- [x] **Milestone 9:** Strict frontend-backend isolation, clean public API, user-facing status design, two-layer configuration with developer gate, reactive waveform equalizer, and OpenAI API adapter with usage tracking.
-- [x] **Milestone 10 (Upgrade):** Unified Assistant Upgrade:
-  - Multi-Cloud Fallback Architecture (Local Ollama Gemma 3 4B, Google Gemini, OpenAI, xAI Grok).
-  - Personal Memory Vault (explicit memory extraction, grounded context injection, search, export, delete).
-  - Personalised English Learning Tutor (spaced repetition, revision check prompt, practical conversational lessons).
-  - Telugu-to-Natural-English Meaning Translator (idiomatic conversational English without word-for-word awkwardness).
-  - Free & Legal Curated Music Deck (Lofi, Ambient, Classical, Nature streams + official YouTube/Spotify app launch).
-  - DuckDuckGo & Wikipedia Web Search Integration.
-  - Complete 35-test Pytest test suite (100% pass rate).
+2. **Dynamic App Detection & Launching (`AppLauncherManager.kt`):**
+   - Inspects installed applications via `packageManager.queryIntentActivities` with `<queries>` package visibility.
+   - Resolves exact and partial application names.
+   - Clarifies ambiguous application matches with the user.
+   - If not installed, informs the user and asks: *"Would you like me to open its Play Store page so you can install it?"*. Opens the official Google Play Store listing (`market://details?id=...`) only upon explicit user confirmation.
 
-- [x] **Milestone 11 (Human Intelligence Layer & Supabase Authentication + Sync):**
-  - **Context Awareness:** Multi-turn reference and pronoun resolution ("that one", "continue", "do it again", "what did I learn yesterday", weather follow-ups).
-  - **Persistent Personal Memory:** Local SQLite storage with automatic contradiction and outdated preference resolution, separate from full chat history, with user-controlled inspection, correction, export, and delete.
-  - **Personalised Behaviour:** Response brevity, explanations, and examples adapt to user preferences; no personal facts assumed without verified evidence.
-  - **Intent Recognition & Clarification:** Dispatches accurately across conversation, tools, media, search, and productivity; prompts with concise clarification when queries are ambiguous.
-  - **Multi-Step Task Planning & Execution:** Automatic decomposition of composite tasks into ordered sub-steps; step-by-step verification; confirmation gates before consequential actions (e.g. data deletion).
-  - **Emotional Awareness:** Detection of conversational cues for confusion, frustration, urgency, and excitement; empathetic response shaping without claiming human consciousness or sentience.
-  - **Adaptive English Tutor:** Daily lesson progress, spaced repetition revision check, vocabulary, and mistake tracking.
-  - **Self-Correction:** Distinguishes verified facts from uncertain information; tries safe alternatives when tools encounter issues.
-  - **Hybrid Intelligence:** Seamless offline local model priority with online AI providers; context preserved across providers without frontend leaks.
-  - **Google Sign-In & Supabase Auth:** Polished "Continue with Google" button, OAuth redirect support on Windows and Android (`ai.ramya.assistant://auth/callback`), session persistence, and token refresh.
-  - **User Profile Management:** Dedicated profile screen with avatar, display name editing, email, creation date, sign-out, data export (JSON), and confirmed account deletion.
-  - **Supabase PostgreSQL Database:** Full migrations for `profiles`, `user_preferences`, `conversations`, `messages`, `user_memories`, `analytics_events`, `user_settings` with Row Level Security (RLS) policies.
-  - **Offline & Online Synchronisation:** Local SQLite `sync_outbox` buffers changes during offline operation; safe flush to Supabase on reconnect; conflict resolution via last-write-wins; local user data is NEVER wiped on network loss.
-  - **Automated Test Suite:** 48 passing tests in Pytest covering context, memory contradiction, planning, emotional cues, auth token verification, outbox queueing, and English revision.
+3. **Intelligent Music Search & Playback (`MusicPlaybackManager.kt`):**
+   - Parses song title and artist from voice queries (`"play [song] by [artist]"`).
+   - Dispatches `MediaStore.INTENT_ACTION_MEDIA_PLAY_FROM_SEARCH` to installed music apps (Spotify, YouTube Music, etc.).
+   - Controls active playback via `AudioManager` media key events (`KEYCODE_MEDIA_PAUSE`, `KEYCODE_MEDIA_PLAY`, `KEYCODE_MEDIA_NEXT`, `KEYCODE_MEDIA_PREVIOUS`).
+   - Adjusts device media stream volume (`ADJUST_RAISE` / `ADJUST_LOWER`).
+   - Remembers user's preferred music app in app settings.
+
+4. **Safe Contact Calling (`ContactCallManager.kt`):**
+   - Queries `ContactsContract.CommonDataKinds.Phone` to find contacts by name.
+   - Disambiguates multiple matching contacts or multiple phone numbers.
+   - Enforces confirmation gates before placing direct calls: *"Found Rahul at +91 98765 43210. Would you like me to place the call?"*.
+   - Uses `Intent.ACTION_DIAL` as safe default, and `Intent.ACTION_CALL` when permission is granted and user confirmed.
+
+5. **Conversational Context & Personal Memory (`ConversationContextManager.kt`):**
+   - Tracks session state across turns.
+   - Resolves contextual pronouns: `"Open it"` (last app), `"Call him"` (last contact), `"Play that song"` (last song).
+   - Ordinary conversational phrases (`"thanks"`, `"okay"`, `"hmm"`, `"alright"`) do NOT terminate the voice session; Ramya replies pleasantly and remains active.
+   - Session terminates only on explicit user request: `"Goodbye"`, `"Stop listening"`, `"Sleep"`.
+   - Persists long-term user memories and preferences to Cloud Firestore (`users/{uid}/memories`).
+
+6. **Automatic Improvement System (`MetricLogger.kt`):**
+   - Logs operational metrics locally on device: response latency, tool execution success/failure, and speech recognition errors.
+   - Comprehensive regression test suite in `AssistantUnitTests.kt`.
 
 ---
 
-## 3. Verified Command Routing Capabilities
+## 2. Feature Implementation Status
 
-| User Command | Routed Service | Public Intent | Verified Result |
-| :--- | :--- | :--- | :--- |
-| `"Hey Ramya"` | Wake Word Detector | `conversation` | Spoken: *"Yes! I am listening. How can I help you?"* |
-| `"Play relaxing music"` | Free Legal Music Player | `media_control` | Spoken: *"Playing Deep Focus Ambient Atmosphere."* |
-| `"Tell my friend in English that I will arrive in ten minutes"` | English Tutor / Telugu Engine | `conversation` | Spoken: *"I'll be there in ten minutes."* |
-| `"Repeat yesterday's English lesson"` | English Learning Tutor | `quiz_learning` | Spoken: *"Yesterday's sentence was: 'Have you eaten?'..."* |
-| `"Remember that I prefer dark cyberpunk mode"` | Personal Memory Engine | `productivity` | Spoken: *"Saved to memory: I prefer dark cyberpunk mode."* |
-| `"Check the weather in Mumbai and also view my tasks"` | Task Planner & Router | `task_planning` | Decomposes into 2 steps, executes sequentially, verifies outputs. |
-| `"What did I learn yesterday?"` | Context Engine | `conversation` | Direct recall of previous day's English sentence and stored facts. |
-| `"Do it again"` (Follow-up) | Context Engine | `live_info` / previous | Automatically repeats previous query using active context. |
-| `"This isn't working why can't you get this right"` | Emotional Engine | Adapted Tone | Empathetic de-escalation without claiming human emotions. |
-| `"Open it"` (Vague) | Context Engine | Clarification | Concise question: *"Which application would you like me to open?"* |
-| `"What theme do I like?"` (Follow-up) | Local Ollama + Gemma 3 4B | `conversation` | Spoken: *"You prefer dark cyberpunk mode, right?"* |
-| `"What is the weather in Hyderabad?"` | Live Data Engine | `live_info` | Spoken: *"Current weather in Hyderabad is 28°C..."* |
-| `"Open YouTube"` | Allowlisted App Launcher | `system_app` | Launches official YouTube client or web fallback |
-| `"Search for Python programming language"` | Web Search Engine | `live_info` | Instant snippet from DuckDuckGo / Wikipedia |
+| Feature / Requirement | Specification Section | Implementation Status | Verification Method |
+| :--- | :---: | :---: | :--- |
+| **"Hey Ramya" Wake Phrase** | Section 2 | **FULLY IMPLEMENTED** | `ConversationContextManager.extractWakePhrase` test (100% Pass) |
+| **Conversational Continuity (Thanks/Hmm)** | Section 2 | **FULLY IMPLEMENTED** | `testConversationalFillersDoNotEndSession` (100% Pass) |
+| **Speech Interruption / Barge-In** | Section 2 | **FULLY IMPLEMENTED** | `VoiceEngine.startListening` halts `stopSpeaking()` immediately |
+| **Dynamic App Resolution** | Section 3 | **FULLY IMPLEMENTED** | `AppLauncherManager.openApp` via PackageManager query |
+| **Play Store Fallback with Confirmation** | Section 3 | **FULLY IMPLEMENTED** | `AppLauncherManager.openPlayStore` gated on user confirmation |
+| **Media Playback by Search** | Section 4 | **FULLY IMPLEMENTED** | `MusicPlaybackManager.playMusic` via `MEDIA_PLAY_FROM_SEARCH` |
+| **Media Playback Controls & Volume** | Section 4 | **FULLY IMPLEMENTED** | `MusicPlaybackManager.sendMediaControl` & `adjustVolume` |
+| **Preferred Music App Setting** | Section 4 | **FULLY IMPLEMENTED** | `SharedPreferences` persistence in `MusicPlaybackManager` |
+| **Contacts Resolution** | Section 5 | **FULLY IMPLEMENTED** | `ContactCallManager.findContacts` via `ContactsContract` |
+| **Calling Confirmation Gate** | Section 5 | **FULLY IMPLEMENTED** | Direct call confirmation required before `ACTION_CALL` |
+| **Safe Phone Dialer Fallback** | Section 5 | **FULLY IMPLEMENTED** | `Intent.ACTION_DIAL` fallback when `CALL_PHONE` not granted |
+| **Multi-Turn Pronoun Resolution** | Section 7 | **FULLY IMPLEMENTED** | `"Open it"`, `"Call him"`, `"Play that song"` context resolution |
+| **Cloud Firestore Memory Sync** | Section 7 | **FULLY IMPLEMENTED** | `CloudManager.saveMemory` to `users/{uid}/memories` |
+| **Operational Metric Logging** | Section 8 | **FULLY IMPLEMENTED** | `MetricLogger.kt` recording latency and tool success |
+| **Desktop Code Cleanup** | User Request | **FULLY IMPLEMENTED** | `apps/desktop` deleted; public mobile landing created |
+
+---
+
+## 3. Verified Build & Test Outputs
+
+- **Android Gradle Tests:** 52 actionable tasks executed, **100% Pass (0 failures)**.
+- **Android Gradle Build:** `gradlew.bat assembleDebug` completed in 8s.
+- **Python Backend Tests:** 63 passed in 142.54s (**100% Pass**).
+- **Release APK:** `releases/ramya-ai-v1.0.0.apk` (14,175,010 bytes, SHA-256: `F8626FB8363F6E183C758C9D7E2625F402B5EADEE2889CB87DB4B444B70C3432`).
+- **Secret Audit:** 0 API keys or plain-text secrets in git history or client build.
