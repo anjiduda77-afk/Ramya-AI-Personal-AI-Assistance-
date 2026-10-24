@@ -380,10 +380,20 @@ fun AndroidCommandCenter(onOpenPermissions: () -> Unit) {
                         cloudStatus = cloudSyncStatus,
                         serviceActive = serviceActive,
                         onToggleService = { active ->
-                            serviceActive = active
                             if (active) {
-                                RamyaVoiceForegroundService.startService(context)
+                                val hasMic = ContextCompat.checkSelfPermission(
+                                    context,
+                                    Manifest.permission.RECORD_AUDIO
+                                ) == PackageManager.PERMISSION_GRANTED
+
+                                if (hasMic) {
+                                    serviceActive = true
+                                    RamyaVoiceForegroundService.startService(context)
+                                } else {
+                                    micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                                }
                             } else {
+                                serviceActive = false
                                 RamyaVoiceForegroundService.stopService(context)
                             }
                         },

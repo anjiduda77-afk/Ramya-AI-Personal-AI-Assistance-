@@ -39,12 +39,24 @@ object AppLauncherIntent {
                     context.startActivity(intent)
                     true
                 } else {
-                    // Fallback to Play Store if not installed
-                    val marketIntent = Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=$pkg")).apply {
-                        flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                    // Fallback to Market, or browser Play Store URL
+                    try {
+                        val marketIntent = Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=$pkg")).apply {
+                            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                        }
+                        context.startActivity(marketIntent)
+                        true
+                    } catch (_: Exception) {
+                        try {
+                            val webIntent = Intent(Intent.ACTION_VIEW, Uri.parse("https://play.google.com/store/apps/details?id=$pkg")).apply {
+                                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                            }
+                            context.startActivity(webIntent)
+                            true
+                        } catch (_: Exception) {
+                            false
+                        }
                     }
-                    context.startActivity(marketIntent)
-                    false
                 }
             } else {
                 false

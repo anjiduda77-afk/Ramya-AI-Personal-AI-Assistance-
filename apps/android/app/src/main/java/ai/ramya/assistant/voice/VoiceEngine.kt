@@ -229,8 +229,14 @@ class VoiceEngine(private val context: Context) : RecognitionListener, TextToSpe
                     onSpeechFinishedCallback?.invoke()
                 }
 
+                @Deprecated("Deprecated in Java", ReplaceWith("onError(utteranceId, -1)"))
                 override fun onError(utteranceId: String?) {
                     _isSpeaking.value = false
+                }
+
+                override fun onError(utteranceId: String?, errorCode: Int) {
+                    _isSpeaking.value = false
+                    Log.w(tag, "TTS utterance error code: $errorCode")
                 }
             })
             Log.d(tag, "TextToSpeech engine ready.")
@@ -298,6 +304,7 @@ class VoiceEngine(private val context: Context) : RecognitionListener, TextToSpe
     // 3. HAPTIC TICK
     // ==========================================
 
+    @Suppress("DEPRECATION")
     private fun vibrateTick() {
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -305,12 +312,10 @@ class VoiceEngine(private val context: Context) : RecognitionListener, TextToSpe
                     val vibratorManager = context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager
                     vibratorManager?.defaultVibrator
                 } else {
-                    @Suppress("DEPRECATION")
                     context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
                 }
                 vibrator?.vibrate(VibrationEffect.createPredefined(VibrationEffect.EFFECT_CLICK))
             } else {
-                @Suppress("DEPRECATION")
                 val vibrator = context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
                 vibrator?.vibrate(25L)
             }
