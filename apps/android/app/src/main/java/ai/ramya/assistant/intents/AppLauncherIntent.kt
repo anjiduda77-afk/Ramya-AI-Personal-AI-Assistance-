@@ -13,6 +13,7 @@ object AppLauncherIntent {
     private val PACKAGE_MAP = mapOf(
         "chrome" to "com.android.chrome",
         "youtube" to "com.google.android.youtube",
+        "spotify" to "com.spotify.music",
         "maps" to "com.google.android.apps.maps",
         "whatsapp" to "com.whatsapp",
         "settings" to "android.settings.SETTINGS"

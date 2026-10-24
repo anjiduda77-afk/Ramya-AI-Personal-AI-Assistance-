@@ -17,11 +17,19 @@ export const CommandCenterScreen: React.FC<CommandCenterScreenProps> = ({
   const [statusMessage, setStatusMessage] = useState<string>('Ready for voice or text command');
   const [lastResponse, setLastResponse] = useState<AssistantResponse | null>(null);
   const [weatherData, setWeatherData] = useState<any>(null);
-  const [watchlist, setWatchlist] = useState<any[]>([]);
   const [tasksSnapshot, setTasksSnapshot] = useState<any[]>([]);
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [customInput, setCustomInput] = useState<string>('');
   const [currentAudio, setCurrentAudio] = useState<HTMLAudioElement | null>(null);
+
+  // Upgrade state: English Tutor, Music, and Personal Memory
+  const [englishSession, setEnglishSession] = useState<any>(null);
+  const [musicStreams, setMusicStreams] = useState<any[]>([]);
+  const [activeMusicTrack, setActiveMusicTrack] = useState<any>(null);
+  const [isAudioPlaying, setIsAudioPlaying] = useState<boolean>(false);
+  const [musicAudio, setMusicAudio] = useState<HTMLAudioElement | null>(null);
+  const [memoriesList, setMemoriesList] = useState<any[]>([]);
+  const [newMemoryText, setNewMemoryText] = useState<string>('');
 
   useEffect(() => {
     loadDashboardData();
@@ -29,14 +37,21 @@ export const CommandCenterScreen: React.FC<CommandCenterScreenProps> = ({
 
   const loadDashboardData = async () => {
     try {
-      const [w, wl, t] = await Promise.all([
-        api.getWeather('Hyderabad'),
-        api.getWatchlist(),
-        api.getTasks(false)
+      const [w, t, eng, ms, mems] = await Promise.all([
+        api.getWeather('Hyderabad').catch(() => null),
+        api.getTasks(false).catch(() => []),
+        api.getEnglishSession().catch(() => null),
+        api.getMusicStreams().catch(() => []),
+        api.getMemories().catch(() => [])
       ]);
-      setWeatherData(w);
-      setWatchlist(wl);
-      setTasksSnapshot(t.slice(0, 3));
+      if (w) setWeatherData(w);
+      if (t) setTasksSnapshot(t.slice(0, 3));
+      if (eng) setEnglishSession(eng);
+      if (ms && ms.length > 0) {
+        setMusicStreams(ms);
+        setActiveMusicTrack(ms[0]);
+      }
+      if (mems) setMemoriesList(mems.slice(0, 4));
     } catch (e) {
       console.warn('Dashboard data refresh');
     }
@@ -46,6 +61,10 @@ export const CommandCenterScreen: React.FC<CommandCenterScreenProps> = ({
     if (currentAudio) {
       currentAudio.pause();
       setCurrentAudio(null);
+    }
+    if (musicAudio) {
+      musicAudio.pause();
+      setIsAudioPlaying(false);
     }
     wsService.cancel();
     setOrbState('ready');
@@ -98,47 +117,44 @@ export const CommandCenterScreen: React.FC<CommandCenterScreenProps> = ({
           setTimeout(() => {
             setOrbState('ready');
             setStatusMessage('Ready');
-          }, 3000);
+          }, 2000);
         }
       } else {
-        setOrbState('ready');
+        setTimeout(() => {
+          setOrbState('ready');
+          setStatusMessage('Ready');
+        }, 1500);
       }
 
+      // Refresh background widgets
       loadDashboardData();
     } catch (e: any) {
       setOrbState('needs_attention');
       setStatusMessage("I couldn't complete that request. Please try again.");
-      setTimeout(() => {
-        setOrbState('ready');
-        setStatusMessage('Ready');
-      }, 3500);
     } finally {
       setIsProcessing(false);
     }
   };
 
   const handleOrbClick = () => {
-    if (orbState === 'speaking' || orbState === 'working') {
+    if (orbState === 'speaking' || isProcessing) {
       handleStop();
       return;
     }
 
     setOrbState('listening');
-    setStatusMessage('Listening in Indian English...');
+    setStatusMessage('Listening... Speak your command or question.');
 
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (SpeechRecognition) {
       const recognition = new SpeechRecognition();
       recognition.lang = 'en-IN';
-      recognition.interimResults = true;
+      recognition.interimResults = false;
       recognition.onresult = (event: any) => {
-        const current = event.results[event.results.length - 1][0].transcript;
-        setStatusMessage(`"${current}"`);
-      };
-      recognition.onend = () => {
+        const transcript = event.results[0][0].transcript;
+        setStatusMessage(`"${transcript}"`);
         setOrbState('understanding');
-        setStatusMessage('Understanding...');
-        handleExecuteCommand(statusMessage.replace(/"/g, ''));
+        handleExecuteCommand(transcript);
       };
       recognition.onerror = () => {
         setOrbState('ready');
@@ -146,7 +162,86 @@ export const CommandCenterScreen: React.FC<CommandCenterScreenProps> = ({
       };
       recognition.start();
     } else {
-      handleExecuteCommand("What's on my agenda for today?");
+      handleExecuteCommand("What is my plan for today?");
+    }
+  };
+
+  // Music stream toggling
+  const handleToggleMusic = (track?: any) => {
+    const selected = track || activeMusicTrack;
+    if (!selected) return;
+
+    if (isAudioPlaying && musicAudio) {
+      musicAudio.pause();
+      setIsAudioPlaying(false);
+      return;
+    }
+
+    if (musicAudio) {
+      musicAudio.pause();
+    }
+
+    const audio = new Audio(selected.stream_url);
+    audio.onended = () => setIsAudioPlaying(false);
+    audio.onerror = () => setIsAudioPlaying(false);
+    audio.play().then(() => {
+      setIsAudioPlaying(true);
+      setActiveMusicTrack(selected);
+      setMusicAudio(audio);
+    }).catch(() => {
+      setIsAudioPlaying(false);
+    });
+  };
+
+  // English Learning Tutor Choice Handling
+  const handleEnglishChoice = async (choice: 'revise' | 'new') => {
+    setIsProcessing(true);
+    setOrbState('working');
+    try {
+      const res = await api.sendEnglishChoice(choice);
+      setEnglishSession(res);
+      setOrbState('speaking');
+      setStatusMessage(res.spoken_response || res.message);
+      if (res.spoken_response) {
+        const audioRes = await api.synthesizeVoice(res.spoken_response);
+        if (audioRes.success && audioRes.url) {
+          const audio = new Audio(`http://127.0.0.1:8000${audioRes.url}`);
+          audio.onended = () => { setOrbState('ready'); setStatusMessage('Ready'); };
+          audio.play().catch(() => { setOrbState('ready'); setStatusMessage('Ready'); });
+        }
+      }
+    } catch {
+      setOrbState('ready');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  // Quick memory save
+  const handleSaveMemory = async () => {
+    if (!newMemoryText.trim()) return;
+    try {
+      await api.createMemory(newMemoryText.trim(), 'general', 4);
+      setNewMemoryText('');
+      loadDashboardData();
+    } catch (e) {
+      console.warn('Memory save error', e);
+    }
+  };
+
+  // Export memories JSON
+  const handleExportMemories = async () => {
+    try {
+      const data = await api.exportMemories();
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `ramya-memories-backup-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      console.warn('Export failed', e);
     }
   };
 
@@ -160,45 +255,47 @@ export const CommandCenterScreen: React.FC<CommandCenterScreenProps> = ({
       gap: '24px'
     }}>
       {/* Top Banner & Quick Actions */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '14px' }}>
         <div>
           <h1 style={{ fontSize: '1.4rem', color: 'var(--neon-cyan)', margin: 0, letterSpacing: '2px' }}>
             COMMAND CENTER
           </h1>
           <div style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginTop: '4px' }}>
-            Personal Cybernetic Intelligence Hub
+            Ramya AI Personal Cybernetic Intelligence Hub
           </div>
         </div>
 
         {/* Action Chips */}
-        <div style={{ display: 'flex', gap: '10px' }}>
+        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
           <button
             className="cyber-btn"
-            onClick={() => handleExecuteCommand('Analyze my current screen')}
+            onClick={() => handleExecuteCommand('Repeat yesterday’s English lesson')}
           >
-            <span>👁️</span> ANALYZE SCREEN
+            <span>📚</span> REPEAT ENGLISH LESSON
+          </button>
+          <button
+            className="cyber-btn"
+            onClick={() => handleExecuteCommand('Play relaxing music')}
+          >
+            <span>🎵</span> PLAY RELAXING MUSIC
           </button>
           <button
             className="cyber-btn cyber-btn-secondary"
-            onClick={() => handleExecuteCommand('Show daily plan')}
+            onClick={() => handleExecuteCommand('Tell my friend in English that I will arrive in ten minutes')}
           >
-            <span>⏱️</span> TODAY'S PLAN
+            <span>🗣️</span> TELUGU TO ENGLISH
           </button>
         </div>
       </div>
 
       {/* Holographic Center: Animated Orb & Waveform */}
-      <div className="holo-card" style={{
-        padding: '36px 24px',
+      <div style={{
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
-        justifyContent: 'center',
-        position: 'relative',
-        background: 'radial-gradient(circle at 50% 50%, rgba(0, 112, 243, 0.12) 0%, rgba(14, 22, 38, 0.85) 75%)',
-        border: '1px solid rgba(0, 240, 255, 0.25)'
+        padding: '24px 0 10px',
+        position: 'relative'
       }}>
-        {/* Animated Ramya AI Orb */}
         <AiOrb
           state={orbState}
           size={190}
@@ -214,7 +311,7 @@ export const CommandCenterScreen: React.FC<CommandCenterScreenProps> = ({
           border: '1px solid rgba(0, 240, 255, 0.25)',
           borderRadius: '24px',
           padding: '8px 24px',
-          maxWidth: '620px',
+          maxWidth: '640px',
           width: '100%',
           textAlign: 'center',
           color: 'var(--text-main)',
@@ -234,7 +331,7 @@ export const CommandCenterScreen: React.FC<CommandCenterScreenProps> = ({
             border: '1px solid var(--neon-amber)',
             borderRadius: '10px',
             padding: '14px 20px',
-            maxWidth: '620px',
+            maxWidth: '640px',
             width: '100%',
             display: 'flex',
             alignItems: 'center',
@@ -267,7 +364,7 @@ export const CommandCenterScreen: React.FC<CommandCenterScreenProps> = ({
         <div style={{
           display: 'flex',
           gap: '12px',
-          maxWidth: '620px',
+          maxWidth: '640px',
           width: '100%',
           marginTop: '18px'
         }}>
@@ -281,7 +378,7 @@ export const CommandCenterScreen: React.FC<CommandCenterScreenProps> = ({
                 setCustomInput('');
               }
             }}
-            placeholder='Ask Ramya (e.g., "What is the weather in Hyderabad?", "Add task to finish presentation", "Open Chrome")'
+            placeholder='Ask Ramya (e.g. "Play relaxing music", "What is the weather?", "Remember that I like coffee")'
             style={{
               flex: 1,
               background: 'rgba(8, 12, 22, 0.85)',
@@ -307,7 +404,7 @@ export const CommandCenterScreen: React.FC<CommandCenterScreenProps> = ({
         </div>
       </div>
 
-      {/* Assistant Spoken / Verified Outcome Card */}
+      {/* Assistant Spoken Response Card */}
       {lastResponse && !lastResponse.requires_approval && (
         <div className="holo-card" style={{ padding: '18px 24px', borderColor: 'var(--neon-cyan)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
@@ -315,7 +412,7 @@ export const CommandCenterScreen: React.FC<CommandCenterScreenProps> = ({
               ASSISTANT RESPONSE
             </span>
             <span style={{ color: 'var(--neon-green)', fontSize: '0.75rem', fontWeight: 600 }}>
-              ✓ Verified
+              ✓ Verified Outcome
             </span>
           </div>
           <div style={{ fontSize: '1.05rem', color: '#fff', fontWeight: 600, marginBottom: '6px' }}>
@@ -327,13 +424,211 @@ export const CommandCenterScreen: React.FC<CommandCenterScreenProps> = ({
         </div>
       )}
 
-      {/* Telemetry Snapshot Grid: Live Weather, Market Pulse & Tasks */}
+      {/* Upgraded Cybernetic Grid: English Tutor, Free Legal Music, Personal Memory, Weather & Tasks */}
       <div style={{
         display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
         gap: '20px'
       }}>
-        {/* Card 1: Ambient Weather Radar */}
+        {/* Card 1: Personalised English Learning Tutor */}
+        <div className="holo-card" style={{ padding: '20px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+            <span style={{ color: 'var(--neon-cyan)', fontWeight: 700, fontSize: '0.8rem', letterSpacing: '1px' }}>
+              ENGLISH LEARNING TUTOR
+            </span>
+            <span style={{ color: 'var(--neon-purple)', fontSize: '0.75rem', fontWeight: 600 }}>
+              DAY {englishSession?.lesson_details?.lesson_day || englishSession?.lesson?.lesson_day || 1}
+            </span>
+          </div>
+
+          {englishSession?.needs_revision_prompt ? (
+            <div>
+              <div style={{ fontSize: '0.92rem', color: '#fff', fontWeight: 600, marginBottom: '8px' }}>
+                Would you like to revise yesterday’s sentence before learning a new one?
+              </div>
+              <div style={{
+                background: 'rgba(0, 240, 255, 0.05)',
+                border: '1px solid rgba(0, 240, 255, 0.2)',
+                borderRadius: '6px',
+                padding: '10px 14px',
+                marginBottom: '12px',
+                fontSize: '0.85rem'
+              }}>
+                <div style={{ color: 'var(--neon-cyan)', fontWeight: 700 }}>
+                  Yesterday: "{englishSession.previous_sentence}"
+                </div>
+                {englishSession.lesson_details?.meaning_telugu && (
+                  <div style={{ color: 'var(--text-muted)', marginTop: '4px' }}>
+                    తెలుగు: {englishSession.lesson_details.meaning_telugu}
+                  </div>
+                )}
+              </div>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                  className="cyber-btn"
+                  style={{ flex: 1, fontSize: '0.8rem' }}
+                  onClick={() => handleEnglishChoice('revise')}
+                >
+                  🔁 REVISE SENTENCE
+                </button>
+                <button
+                  className="cyber-btn cyber-btn-secondary"
+                  style={{ flex: 1, fontSize: '0.8rem' }}
+                  onClick={() => handleEnglishChoice('new')}
+                >
+                  ➡️ NEW LESSON
+                </button>
+              </div>
+            </div>
+          ) : englishSession?.lesson ? (
+            <div>
+              <div style={{ fontSize: '1rem', color: '#fff', fontWeight: 700, marginBottom: '6px' }}>
+                "{englishSession.lesson.sentence_en}"
+              </div>
+              <div style={{ color: 'var(--neon-cyan)', fontSize: '0.85rem', marginBottom: '8px' }}>
+                తెలుగు: {englishSession.lesson.meaning_telugu}
+              </div>
+              <div style={{ color: 'var(--text-muted)', fontSize: '0.82rem', marginBottom: '12px' }}>
+                💡 {englishSession.lesson.grammar_note}
+              </div>
+              <button
+                className="cyber-btn"
+                style={{ width: '100%', fontSize: '0.8rem' }}
+                onClick={() => handleEnglishChoice('new')}
+              >
+                NEXT LESSON →
+              </button>
+            </div>
+          ) : (
+            <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+              Loading personalized English curriculum...
+            </div>
+          )}
+        </div>
+
+        {/* Card 2: Free and Legal Curated Music Deck */}
+        <div className="holo-card" style={{ padding: '20px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+            <span style={{ color: 'var(--neon-cyan)', fontWeight: 700, fontSize: '0.8rem', letterSpacing: '1px' }}>
+              FREE & LEGAL MUSIC DECK
+            </span>
+            <span style={{ color: isAudioPlaying ? 'var(--neon-green)' : 'var(--text-muted)', fontSize: '0.75rem' }}>
+              {isAudioPlaying ? '● PLAYING' : 'PAUSED'}
+            </span>
+          </div>
+
+          {activeMusicTrack && (
+            <div style={{ marginBottom: '12px' }}>
+              <div style={{ fontSize: '0.95rem', color: '#fff', fontWeight: 700 }}>
+                {activeMusicTrack.title}
+              </div>
+              <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                {activeMusicTrack.artist} • Genre: {activeMusicTrack.genre.toUpperCase()}
+              </div>
+            </div>
+          )}
+
+          {/* Genre selector chips */}
+          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '14px' }}>
+            {musicStreams.map((s) => (
+              <button
+                key={s.id}
+                onClick={() => handleToggleMusic(s)}
+                style={{
+                  background: activeMusicTrack?.id === s.id ? 'var(--neon-cyan)' : 'rgba(0, 240, 255, 0.08)',
+                  color: activeMusicTrack?.id === s.id ? '#000' : 'var(--neon-cyan)',
+                  border: '1px solid rgba(0, 240, 255, 0.3)',
+                  padding: '4px 10px',
+                  borderRadius: '14px',
+                  fontSize: '0.72rem',
+                  cursor: 'pointer',
+                  fontWeight: 600
+                }}
+              >
+                {s.genre.toUpperCase()}
+              </button>
+            ))}
+          </div>
+
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button
+              className="cyber-btn"
+              style={{ flex: 1, fontSize: '0.8rem' }}
+              onClick={() => handleToggleMusic()}
+            >
+              {isAudioPlaying ? '⏸️ PAUSE' : '▶️ PLAY AUDIO'}
+            </button>
+            <button
+              className="cyber-btn cyber-btn-secondary"
+              style={{ fontSize: '0.8rem' }}
+              onClick={() => api.launchMusicApp('youtube')}
+            >
+              YOUTUBE
+            </button>
+            <button
+              className="cyber-btn cyber-btn-secondary"
+              style={{ fontSize: '0.8rem' }}
+              onClick={() => api.launchMusicApp('spotify')}
+            >
+              SPOTIFY
+            </button>
+          </div>
+        </div>
+
+        {/* Card 3: Personal Memory & Facts Hub */}
+        <div className="holo-card" style={{ padding: '20px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+            <span style={{ color: 'var(--neon-cyan)', fontWeight: 700, fontSize: '0.8rem', letterSpacing: '1px' }}>
+              PERSONAL MEMORY
+            </span>
+            <button
+              onClick={handleExportMemories}
+              style={{ background: 'none', border: 'none', color: 'var(--neon-cyan)', cursor: 'pointer', fontSize: '0.75rem' }}
+            >
+              EXPORT JSON ↓
+            </button>
+          </div>
+
+          {/* Quick Memory List */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '14px', maxHeight: '120px', overflowY: 'auto' }}>
+            {memoriesList.length > 0 ? (
+              memoriesList.map((m) => (
+                <div key={m.id} style={{ fontSize: '0.82rem', color: '#fff', background: 'rgba(5, 7, 12, 0.6)', padding: '6px 10px', borderRadius: '4px' }}>
+                  <span style={{ color: 'var(--neon-purple)', fontWeight: 600 }}>[{m.category.toUpperCase()}]</span> {m.content}
+                </div>
+              ))
+            ) : (
+              <div style={{ color: 'var(--text-dim)', fontSize: '0.82rem' }}>
+                Say "Remember that..." to save preferences or facts.
+              </div>
+            )}
+          </div>
+
+          {/* Quick Add Memory */}
+          <div style={{ display: 'flex', gap: '6px' }}>
+            <input
+              type="text"
+              value={newMemoryText}
+              onChange={(e) => setNewMemoryText(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleSaveMemory()}
+              placeholder="Save new fact..."
+              style={{
+                flex: 1,
+                background: 'rgba(5, 7, 12, 0.9)',
+                border: '1px solid var(--border-subtle)',
+                color: '#fff',
+                padding: '6px 10px',
+                borderRadius: '4px',
+                fontSize: '0.8rem'
+              }}
+            />
+            <button className="cyber-btn" style={{ padding: '6px 12px', fontSize: '0.75rem' }} onClick={handleSaveMemory}>
+              SAVE
+            </button>
+          </div>
+        </div>
+
+        {/* Card 4: Ambient Weather Radar */}
         <div className="holo-card" style={{ padding: '20px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
             <span style={{ color: 'var(--neon-cyan)', fontWeight: 700, fontSize: '0.8rem', letterSpacing: '1px' }}>
@@ -364,44 +659,7 @@ export const CommandCenterScreen: React.FC<CommandCenterScreenProps> = ({
           )}
         </div>
 
-        {/* Card 2: Market Watchlist */}
-        <div className="holo-card" style={{ padding: '20px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
-            <span style={{ color: 'var(--neon-cyan)', fontWeight: 700, fontSize: '0.8rem', letterSpacing: '1px' }}>
-              MARKET WATCHLIST
-            </span>
-            <button
-              onClick={() => onNavigate('weather_markets')}
-              style={{ background: 'none', border: 'none', color: 'var(--neon-cyan)', cursor: 'pointer', fontSize: '0.75rem' }}
-            >
-              RADAR →
-            </button>
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-            {watchlist.slice(0, 3).map((w) => (
-              <div key={w.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.85rem' }}>
-                <span style={{ color: '#fff', fontWeight: 700 }}>{w.symbol}</span>
-                <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>{w.company_name}</span>
-                <button
-                  onClick={() => handleExecuteCommand(`Stock price of ${w.symbol}`)}
-                  style={{
-                    background: 'rgba(0, 240, 255, 0.08)',
-                    border: '1px solid rgba(0, 240, 255, 0.25)',
-                    color: 'var(--neon-cyan)',
-                    borderRadius: '4px',
-                    padding: '2px 8px',
-                    cursor: 'pointer',
-                    fontSize: '0.75rem'
-                  }}
-                >
-                  Quote
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Card 3: Priority Tasks */}
+        {/* Card 5: Priority Tasks */}
         <div className="holo-card" style={{ padding: '20px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
             <span style={{ color: 'var(--neon-cyan)', fontWeight: 700, fontSize: '0.8rem', letterSpacing: '1px' }}>

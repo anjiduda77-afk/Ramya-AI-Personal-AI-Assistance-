@@ -290,5 +290,112 @@ export const api = {
     } catch {
       return [];
     }
+  },
+
+  // Personal Memory API
+  async getMemories(category?: string, query?: string): Promise<any[]> {
+    const params = new URLSearchParams();
+    if (category) params.append('category', category);
+    if (query) params.append('query', query);
+    const url = params.toString() ? `${API_BASE}/memory?${params.toString()}` : `${API_BASE}/memory`;
+    const res = await fetch(url);
+    return res.json();
+  },
+
+  async createMemory(content: string, category: string = 'general', importance: number = 3): Promise<any> {
+    const res = await fetch(`${API_BASE}/memory`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content, category, importance })
+    });
+    return res.json();
+  },
+
+  async updateMemory(memoryId: string, content: string, category?: string, importance?: number): Promise<any> {
+    const res = await fetch(`${API_BASE}/memory/${memoryId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content, category, importance })
+    });
+    return res.json();
+  },
+
+  async deleteMemory(memoryId: string): Promise<any> {
+    const res = await fetch(`${API_BASE}/memory/${memoryId}`, { method: 'DELETE' });
+    return res.json();
+  },
+
+  async exportMemories(): Promise<any> {
+    const res = await fetch(`${API_BASE}/memory/export`);
+    return res.json();
+  },
+
+  async clearAllMemories(): Promise<any> {
+    const res = await fetch(`${API_BASE}/memory/clear/all`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ confirmed: true })
+    });
+    return res.json();
+  },
+
+  // English Learning Tutor API
+  async getEnglishSession(): Promise<any> {
+    const res = await fetch(`${API_BASE}/english-tutor/session`);
+    return res.json();
+  },
+
+  async getEnglishProgress(): Promise<any> {
+    const res = await fetch(`${API_BASE}/english-tutor/progress`);
+    return res.json();
+  },
+
+  async sendEnglishChoice(choice: string): Promise<any> {
+    const res = await fetch(`${API_BASE}/english-tutor/choice`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ choice })
+    });
+    return res.json();
+  },
+
+  async translateTeluguToEnglish(query: string): Promise<any> {
+    const res = await fetch(`${API_BASE}/english-tutor/translate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query })
+    });
+    return res.json();
+  },
+
+  // Free Legal Music API
+  async getMusicStreams(genre?: string): Promise<any[]> {
+    const url = genre ? `${API_BASE}/music/streams?genre=${encodeURIComponent(genre)}` : `${API_BASE}/music/streams`;
+    const res = await fetch(url);
+    return res.json();
+  },
+
+  async playMusicStream(query: string = 'relaxing'): Promise<any> {
+    const res = await fetch(`${API_BASE}/music/play`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query })
+    });
+    return res.json();
+  },
+
+  async launchMusicApp(app: string = 'youtube'): Promise<any> {
+    const res = await fetch(`${API_BASE}/music/app`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ app })
+    });
+    return res.json();
+  },
+
+  // Web Search API
+  async webSearch(q: string): Promise<any> {
+    const res = await fetch(`${API_BASE}/search?q=${encodeURIComponent(q)}`);
+    return res.json();
   }
 };

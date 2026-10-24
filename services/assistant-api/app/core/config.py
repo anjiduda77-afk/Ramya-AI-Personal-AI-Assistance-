@@ -57,6 +57,14 @@ class Settings:
     CLOUD_PROVIDER: str = os.getenv("RAMYA_CLOUD_PROVIDER", "gemini")
     CLOUD_API_KEY: str = os.getenv("RAMYA_CLOUD_API_KEY", "")
     CLOUD_MODEL: str = os.getenv("RAMYA_CLOUD_MODEL", "gemini-1.5-flash")
+
+    # Specific Cloud Providers (Gemini, OpenAI, xAI Grok)
+    GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", os.getenv("RAMYA_CLOUD_API_KEY", ""))
+    GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
+    OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
+    OPENAI_MODEL: str = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+    XAI_API_KEY: str = os.getenv("XAI_API_KEY", "")
+    XAI_MODEL: str = os.getenv("XAI_MODEL", "grok-beta")
     
     # Voice Settings
     LANGUAGE: str = os.getenv("RAMYA_LANGUAGE", "en-IN")

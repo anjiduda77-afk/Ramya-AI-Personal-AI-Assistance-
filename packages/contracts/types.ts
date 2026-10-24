@@ -64,7 +64,7 @@ export interface CommandRequest {
 
 // 3. User-Facing Response Cards & Grounded Sources
 export interface PublicCard {
-  type: 'weather' | 'stock' | 'task' | 'reminder' | 'document' | 'screen' | 'quiz' | 'media';
+  type: 'weather' | 'stock' | 'task' | 'reminder' | 'document' | 'screen' | 'quiz' | 'media' | 'memory' | 'english_lesson' | 'music_player' | 'search_results';
   title: string;
   data: Record<string, any>;
 }
@@ -250,3 +250,57 @@ export interface QuizSession {
   score: number;
   isFinished: boolean;
 }
+
+// 11. Personal Memory (User-Controlled)
+export interface UserMemoryItem {
+  id: string;
+  category: 'preference' | 'fact' | 'project' | 'learned_language' | 'note' | 'general';
+  content: string;
+  importance: number;
+  created_at: string;
+  updated_at: string;
+}
+
+// 12. English Learning Tutor & Revision
+export interface EnglishLessonRecord {
+  id: string;
+  lesson_day: number;
+  sentence_en: string;
+  meaning_telugu: string;
+  meaning_simple_en: string;
+  grammar_note: string;
+  status: 'new' | 'learning' | 'revised' | 'mastered';
+  last_reviewed: string;
+  review_count: number;
+}
+
+export interface EnglishLearningProgress {
+  current_level: string;
+  total_learned: number;
+  total_lessons_available: number;
+  streak_days: number;
+  last_lesson_date?: string;
+  pending_revision_sentence?: string;
+  needs_revision_prompt?: boolean;
+}
+
+// 13. Free & Legal Curated Music
+export interface LegalMusicTrack {
+  id: string;
+  title: string;
+  artist: string;
+  genre: 'lofi' | 'ambient' | 'classical' | 'focus' | 'nature' | string;
+  stream_url: string;
+  is_free_legal: boolean;
+}
+
+// 14. Web Search Results
+export interface WebSearchResult {
+  status: string;
+  title: string;
+  snippet: string;
+  url: string;
+  source: string;
+  spoken_response?: string;
+}
+

@@ -18,6 +18,10 @@ from app.tools.productivity import productivity
 from app.tools.quiz import quiz_manager
 from app.rag.engine import rag_engine
 from app.providers.router import router
+from app.memory.engine import memory_engine
+from app.tools.english_tutor import english_tutor
+from app.tools.music_player import music_player
+from app.tools.web_search import web_search_engine
 
 logger = logging.getLogger("ramya.tools.router")
 
@@ -56,10 +60,22 @@ class CommandRouter:
 
         # 2. Fast Deterministic Matchers
 
-        # --- A. Media Controls ---
+        # --- A. Free and Legal Music Playback ---
+        if re.search(r"\bplay\s+(?:(?:some\s+)?(relaxing|chill|lofi|ambient|classical|nature|calm|study|focus)\s+)?(music|song|beats?|tracks?)\b", lower_q):
+            m_res = music_player.play_music(clean_q)
+            return self._build_response(
+                task_id=task_id,
+                query=clean_q,
+                intent="media_control",
+                spoken=m_res["spoken_response"],
+                message=m_res["message"],
+                card={"type": "media", "title": "Legal Music Playback", "data": m_res["track"]}
+            )
+
+        # --- Media Controls ---
         media_patterns = {
             r"\b(pause|stop)\s+(the\s+)?(music|song|playback|media)\b": "pause",
-            r"\b(play|resume)\s+(the\s+)?(music|song|playback|media)\b": "play",
+            r"\b(resume)\s+(the\s+)?(music|song|playback|media)\b": "play",
             r"\b(next|skip)\s+(track|song|music)\b": "next",
             r"\b(previous|prev)\s+(track|song|music)\b": "previous",
             r"\b(mute|silence)\b": "mute",
@@ -251,6 +267,89 @@ class CommandRouter:
                 card={"type": "task", "title": "Daily Plan", "data": summary}
             )
 
+        # --- Personal Memory: Explicit Storage ("Remember that...", "Remember my...", "Don't forget that...") ---
+        explicit_mem = memory_engine.extract_and_save_explicit_memory(clean_q)
+        if explicit_mem:
+            spoken = f"Saved to memory: {explicit_mem['content']}."
+            return self._build_response(
+                task_id=task_id,
+                query=clean_q,
+                intent="productivity",
+                spoken=spoken,
+                message=f"Saved to personal memory [{explicit_mem['category']}]:\n\n\"{explicit_mem['content']}\"",
+                card={"type": "task", "title": "Memory Saved", "data": explicit_mem}
+            )
+
+        # Personal Memory: Recall / Show Memories
+        if re.search(r"\b(what\s+do\s+you\s+remember|show\s+(my\s+)?memories|list\s+(my\s+)?memories|read\s+(my\s+)?memories)\b", lower_q):
+            memories = memory_engine.list_memories()
+            spoken = f"You have {len(memories)} stored memories."
+            return self._build_response(
+                task_id=task_id,
+                query=clean_q,
+                intent="productivity",
+                spoken=spoken,
+                message=f"You have {len(memories)} stored memories.",
+                card={"type": "task", "title": "Personal Memories", "data": {"memories": memories}}
+            )
+
+        # Productivity: Read Notes ("Read my notes", "Show notes")
+        if re.search(r"\b(read|show|view|list)\s+(my\s+)?notes\b", lower_q):
+            notes = productivity.list_notes()
+            spoken = f"You have {len(notes)} saved notes."
+            return self._build_response(
+                task_id=task_id,
+                query=clean_q,
+                intent="productivity",
+                spoken=spoken,
+                message=f"Total notes: {len(notes)}",
+                card={"type": "task", "title": "Your Notes", "data": {"notes": notes}}
+            )
+
+        # --- English Learning Tutor: Revision Request ("Repeat yesterday's English lesson") ---
+        if re.search(r"\b(repeat|revise)\s+(?:yesterday['’]?s\s+)?(?:english\s+)?lesson\b", lower_q):
+            rev_res = english_tutor.process_choice("revise")
+            return self._build_response(
+                task_id=task_id,
+                query=clean_q,
+                intent="quiz_learning",
+                spoken=rev_res["spoken_response"],
+                message=rev_res["message"],
+                card={"type": "quiz", "title": "English Lesson Revision", "data": rev_res}
+            )
+
+        # English Learning Tutor: Daily Practice / Start Session
+        if re.search(r"\b(learn\s+english|teach\s+me\s+english|english\s+lesson|daily\s+english|english\s+practice)\b", lower_q):
+            sess_res = english_tutor.start_or_check_daily_session()
+            return self._build_response(
+                task_id=task_id,
+                query=clean_q,
+                intent="quiz_learning",
+                spoken=sess_res["spoken_response"],
+                message=sess_res["message"],
+                card={"type": "quiz", "title": "English Learning Session", "data": sess_res}
+            )
+
+        # Telugu Speech / Voice Translation to Natural English
+        if (
+            re.search(r"\b(?:tell\s+(?:my\s+friend|them|him|her)\s+in\s+english\s+that|say\s+in\s+english|translate\s+(?:this\s+)?to\s+english)\b", lower_q)
+            or bool(re.search(r"[\u0C00-\u0C7F]", clean_q))
+        ):
+            trans = english_tutor.translate_telugu_or_intent_to_natural_english(clean_q)
+            spoken = trans["natural_english"]
+            message = (
+                f"**Natural English:** \"{trans['natural_english']}\"\n\n"
+                f"💡 {trans['explanation']}"
+            )
+            return self._build_response(
+                task_id=task_id,
+                query=clean_q,
+                intent="conversation",
+                spoken=spoken,
+                message=message,
+                card={"type": "quiz", "title": "Natural English Translation", "data": trans}
+            )
+
         # --- G. Quiz & Learning ---
         if re.search(r"\b(start|take|run)\s+(a\s+)?quiz\b|\bquiz\s+me\b", lower_q):
             questions = quiz_manager.get_questions()
@@ -285,6 +384,21 @@ class CommandRouter:
                 sources=sources,
                 card={"type": "document", "title": "Document Insights", "data": rag_res}
             )
+
+        # --- Web Search: Instant Knowledge Lookup ---
+        s_match = re.search(r"\b(?:search\s+(?:the\s+web\s+|google\s+)?for|look\s*up|who\s+is|what\s+is\s+the\s+capital\s+of)\s+(.+)", clean_q, re.IGNORECASE)
+        if s_match and not any(k in lower_q for k in ["weather", "temperature", "stock", "shares", "screen", "document", "task", "reminder", "quiz", "lesson"]):
+            s_query = s_match.group(1).strip()
+            search_res = await web_search_engine.search(s_query)
+            if search_res.get("status") == "success":
+                return self._build_response(
+                    task_id=task_id,
+                    query=clean_q,
+                    intent="live_info",
+                    spoken=search_res.get("spoken_response", search_res["snippet"][:200]),
+                    message=f"**{search_res['title']}**\n\n{search_res['snippet']}\n\n*Source: [{search_res['source']}]({search_res.get('url', '')})*",
+                    card={"type": "screen", "title": search_res["title"], "data": search_res}
+                )
 
         # --- I. General Conversational Intelligence: Local First ---
         response_text, provider_name, model_name, is_offline = await router.generate(clean_q)

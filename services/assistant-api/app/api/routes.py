@@ -25,6 +25,10 @@ from app.rag.vector_store import vector_store
 from app.rag.engine import rag_engine
 from app.voice.tts import tts_engine
 from app.security.permissions import permissions, PermissionTier
+from app.memory.engine import memory_engine
+from app.tools.english_tutor import english_tutor
+from app.tools.music_player import music_player
+from app.tools.web_search import web_search_engine
 
 logger = logging.getLogger("ramya.api.routes")
 api_router = APIRouter()
@@ -360,3 +364,103 @@ async def get_developer_diagnostics(authorization: Optional[str] = Header(None))
         "cloudUsageCostUsd": usage_rows["c"] or 0.0,
         "memoryUsageMb": round(psutil.virtual_memory().used / (1024 * 1024), 2)
     }
+
+# --- 12. PERSONAL MEMORY ENDPOINTS ---
+@api_router.get("/memory")
+async def list_memories(category: Optional[str] = None, query: Optional[str] = None):
+    """Lists saved user memories with optional category and search query filters."""
+    return memory_engine.list_memories(category=category, query=query)
+
+@api_router.post("/memory")
+async def create_memory(payload: Dict[str, Any]):
+    """Creates a new personal memory entry."""
+    content = payload.get("content", "").strip()
+    if not content:
+        raise HTTPException(status_code=400, detail="Memory content cannot be empty.")
+    category = payload.get("category", "general")
+    importance = payload.get("importance", 3)
+    return memory_engine.save_memory(content=content, category=category, importance=importance)
+
+@api_router.put("/memory/{memory_id}")
+async def update_memory(memory_id: str, payload: Dict[str, Any]):
+    """Updates an existing personal memory."""
+    content = payload.get("content", "").strip()
+    if not content:
+        raise HTTPException(status_code=400, detail="Memory content cannot be empty.")
+    category = payload.get("category")
+    importance = payload.get("importance")
+    success = memory_engine.update_memory(memory_id, content=content, category=category, importance=importance)
+    if not success:
+        raise HTTPException(status_code=404, detail="Memory item not found.")
+    return {"success": True, "message": "Memory updated."}
+
+@api_router.delete("/memory/{memory_id}")
+async def delete_memory(memory_id: str):
+    """Deletes a personal memory."""
+    success = memory_engine.delete_memory(memory_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Memory item not found.")
+    return {"success": True, "message": "Memory deleted."}
+
+@api_router.get("/memory/export")
+async def export_memories():
+    """Exports all stored memories and conversation histories for user backup."""
+    return memory_engine.export_all()
+
+@api_router.delete("/memory/clear/all")
+async def clear_all_memories(payload: Dict[str, bool]):
+    """Purges all personal memories upon explicit user request."""
+    if not payload.get("confirmed", False):
+        raise HTTPException(status_code=400, detail="Memory purge requires explicit confirmation.")
+    count = memory_engine.clear_all_memories()
+    return {"success": True, "message": f"Successfully deleted {count} memory entries."}
+
+# --- 13. ENGLISH LEARNING TUTOR ENDPOINTS ---
+@api_router.get("/english-tutor/session")
+async def get_english_session():
+    """Starts or checks daily English lesson state and revision prompt."""
+    return english_tutor.start_or_check_daily_session()
+
+@api_router.get("/english-tutor/progress")
+async def get_english_progress():
+    """Returns overall English learning progress, current level, and streak."""
+    return english_tutor.get_progress()
+
+@api_router.post("/english-tutor/choice")
+async def process_english_choice(payload: Dict[str, str]):
+    """Handles user choice: revision ('revise') or new lesson ('new')."""
+    choice = payload.get("choice", "revise")
+    return english_tutor.process_choice(choice)
+
+@api_router.post("/english-tutor/translate")
+async def translate_telugu_to_english(payload: Dict[str, str]):
+    """Translates Telugu speech or natural intent into natural conversational English."""
+    query = payload.get("query", "").strip()
+    if not query:
+        raise HTTPException(status_code=400, detail="Query cannot be empty.")
+    return english_tutor.translate_telugu_or_intent_to_natural_english(query)
+
+# --- 14. FREE & LEGAL MUSIC ENDPOINTS ---
+@api_router.get("/music/streams")
+async def list_music_streams(genre: Optional[str] = None):
+    """Lists verified free and legal music streams."""
+    return music_player.list_streams(genre=genre)
+
+@api_router.post("/music/play")
+async def play_music(payload: Dict[str, str]):
+    """Requests playback of legal music stream for given mood/query."""
+    query = payload.get("query", "relaxing")
+    return music_player.play_music(query=query)
+
+@api_router.post("/music/app")
+async def launch_music_app(payload: Dict[str, str]):
+    """Launches an official external music application (YouTube, Spotify)."""
+    app_name = payload.get("app", "youtube")
+    return music_player.launch_external_app(app_name=app_name)
+
+# --- 15. WEB SEARCH ENDPOINT ---
+@api_router.get("/search")
+async def web_search(q: str = Query(..., min_length=1)):
+    """Executes free, legal web search via DuckDuckGo and Wikipedia."""
+    return await web_search_engine.search(q)
+
