@@ -1,11 +1,10 @@
 package ai.ramya.assistant
 
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -32,6 +31,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.launch
+import ai.ramya.assistant.data.CloudManager
 import ai.ramya.assistant.intents.AppLauncherIntent
 import ai.ramya.assistant.intents.DialerIntent
 import ai.ramya.assistant.service.RamyaVoiceForegroundService
@@ -64,21 +65,24 @@ class MainActivity : ComponentActivity() {
 enum class MobileTab {
     VOICE_ASSISTANT,
     TELUGU_TUTOR,
-    TOOLS_STATUS
+    ACCOUNT_CLOUD
 }
 
 @Composable
 fun AndroidCommandCenter(onOpenPermissions: () -> Unit) {
     val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
     val focusManager = LocalFocusManager.current
     
     var currentTab by remember { mutableStateOf(MobileTab.VOICE_ASSISTANT) }
     var isListening by remember { mutableStateOf(false) }
-    var userTranscript by remember { mutableStateOf("Tap the Orb or say 'Hey Ramya'...") }
-    var assistantResponse by remember { mutableStateOf("Namaskaram! I am Ramya, your offline-first personal assistant. How can I help you today?") }
+    var isThinking by remember { mutableStateOf(false) }
+    var userTranscript by remember { mutableStateOf("Tap the Orb or say 'Hey Ramya' to speak...") }
+    var assistantResponse by remember { mutableStateOf("Namaskaram! I am Ramya, your personal voice companion. How can I help you today?") }
     var serviceActive by remember { mutableStateOf(false) }
     var textPrompt by remember { mutableStateOf("") }
-    var isSpeaking by remember { mutableStateOf(false) }
+    var userProfileText by remember { mutableStateOf(CloudManager.getUserEmail()) }
+    var cloudSyncStatus by remember { mutableStateOf("Cloud Database: Connected") }
 
     // Pulsing Orb Animation
     val infiniteTransition = rememberInfiniteTransition(label = "orbPulse")
@@ -101,41 +105,19 @@ fun AndroidCommandCenter(onOpenPermissions: () -> Unit) {
         label = "haloAlpha"
     )
 
-    fun handleCommand(query: String) {
-        val q = query.lowercase().trim()
-        userTranscript = query
+    fun executeQuery(query: String) {
+        val clean = query.trim()
+        if (clean.isBlank()) return
+        
+        userTranscript = clean
         isListening = false
-        isSpeaking = true
+        isThinking = true
+        assistantResponse = "Thinking..."
 
-        when {
-            q.contains("weather") -> {
-                assistantResponse = "Weather in Hyderabad: 28°C, Clear Sky. Humidity: 48%. Perfect weather today!"
-            }
-            q.contains("english") || q.contains("teach") || q.contains("lesson") -> {
-                assistantResponse = "Today's conversational phrase: 'Could you please help me with this?'\nTelugu: 'దయచేసి నాకు ఇందులో సహాయం చేయగలరా?'"
-                currentTab = MobileTab.TELUGU_TUTOR
-            }
-            q.contains("translate") || q.contains("telugu") -> {
-                assistantResponse = "Telugu intent: 'నేను పది నిమిషాల్లో వస్తాను'\nNatural English: 'I will be there in ten minutes.'"
-            }
-            q.contains("music") || q.contains("relax") || q.contains("play") -> {
-                assistantResponse = "Playing legal CC-licensed stream: 'Deep Focus Ambient Beats' by Musopen."
-            }
-            q.contains("youtube") -> {
-                assistantResponse = "Opening YouTube..."
-                AppLauncherIntent.launchApp(context, "youtube")
-            }
-            q.contains("chrome") -> {
-                assistantResponse = "Opening Google Chrome..."
-                AppLauncherIntent.launchApp(context, "chrome")
-            }
-            q.contains("dial") || q.contains("call") -> {
-                assistantResponse = "Opening Phone Dialer..."
-                DialerIntent.openDialer(context, "")
-            }
-            else -> {
-                assistantResponse = "Understood: '$query'. Local Gemma 3 4B processed your request offline with zero cloud latency."
-            }
+        coroutineScope.launch {
+            val response = CloudManager.askRamya(clean)
+            assistantResponse = response
+            isThinking = false
         }
     }
 
@@ -157,12 +139,12 @@ fun AndroidCommandCenter(onOpenPermissions: () -> Unit) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(
                     modifier = Modifier
-                        .size(34.dp)
+                        .size(36.dp)
                         .background(Brush.radialGradient(listOf(NeonCyan, ElectricBlue)), CircleShape)
                         .border(1.5.dp, NeonCyan, CircleShape),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text("R", color = Color.Black, fontWeight = FontWeight.ExtraBold, fontSize = 16.sp)
+                    Text("R", color = Color.Black, fontWeight = FontWeight.Black, fontSize = 17.sp)
                 }
                 Spacer(modifier = Modifier.width(10.dp))
                 Column {
@@ -190,8 +172,8 @@ fun AndroidCommandCenter(onOpenPermissions: () -> Unit) {
                         )
                         Spacer(modifier = Modifier.width(5.dp))
                         Text(
-                            text = "HYBRID ACTIVE",
-                            color = NeonGreen,
+                            text = if (isThinking) "PROCESSING..." else "ONLINE & READY",
+                            color = if (isThinking) NeonAmber else NeonGreen,
                             fontSize = 9.sp,
                             fontWeight = FontWeight.Bold,
                             letterSpacing = 0.8.sp
@@ -200,18 +182,16 @@ fun AndroidCommandCenter(onOpenPermissions: () -> Unit) {
                 }
             }
 
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(
-                    onClick = onOpenPermissions,
-                    colors = ButtonDefaults.buttonColors(containerColor = CyberpunkCard),
-                    shape = RoundedCornerShape(10.dp),
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-                    modifier = Modifier
-                        .height(34.dp)
-                        .border(1.dp, CyberpunkCardBorder, RoundedCornerShape(10.dp))
-                ) {
-                    Text("🛡️ PERMS", color = TextSecondary, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                }
+            Button(
+                onClick = onOpenPermissions,
+                colors = ButtonDefaults.buttonColors(containerColor = CyberpunkCard),
+                shape = RoundedCornerShape(10.dp),
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                modifier = Modifier
+                    .height(34.dp)
+                    .border(1.dp, CyberpunkCardBorder, RoundedCornerShape(10.dp))
+            ) {
+                Text("🛡️ PERMISSIONS", color = TextSecondary, fontSize = 11.sp, fontWeight = FontWeight.Bold)
             }
         }
 
@@ -227,8 +207,8 @@ fun AndroidCommandCenter(onOpenPermissions: () -> Unit) {
         ) {
             val tabs = listOf(
                 Triple(MobileTab.VOICE_ASSISTANT, "🎙️ Assistant", NeonCyan),
-                Triple(MobileTab.TELUGU_TUTOR, "📚 Telugu Tutor", NeonViolet),
-                Triple(MobileTab.TOOLS_STATUS, "⚡ Tools", ElectricBlue)
+                Triple(MobileTab.TELUGU_TUTOR, "📚 English Tutor", NeonViolet),
+                Triple(MobileTab.ACCOUNT_CLOUD, "☁️ Cloud & Account", ElectricBlue)
             )
 
             tabs.forEach { (tab, title, accentColor) ->
@@ -267,6 +247,7 @@ fun AndroidCommandCenter(onOpenPermissions: () -> Unit) {
                 MobileTab.VOICE_ASSISTANT -> {
                     VoiceAssistantTab(
                         isListening = isListening,
+                        isThinking = isThinking,
                         scalePulse = scalePulse,
                         haloAlpha = haloAlpha,
                         userTranscript = userTranscript,
@@ -274,22 +255,26 @@ fun AndroidCommandCenter(onOpenPermissions: () -> Unit) {
                         onOrbClick = {
                             isListening = !isListening
                             if (isListening) {
-                                userTranscript = "Listening for voice..."
+                                userTranscript = "Listening for your voice..."
                             } else {
-                                handleCommand("Hello Ramya, what is today's schedule?")
+                                executeQuery("Hello Ramya, what is the weather today?")
                             }
                         },
-                        onQuickChipClick = { cmd -> handleCommand(cmd) }
+                        onQuickChipClick = { cmd -> executeQuery(cmd) }
                     )
                 }
                 MobileTab.TELUGU_TUTOR -> {
                     TeluguTutorTab(
-                        onPracticeSpoken = { handleCommand("Teach me an English conversation phrase") }
+                        onPracticeSpoken = {
+                            executeQuery("Translate to English: దయచేసి నాకు ఇందులో సహాయం చేయగలరా?")
+                        }
                     )
                 }
-                MobileTab.TOOLS_STATUS -> {
-                    ToolsAndStatusTab(
+                MobileTab.ACCOUNT_CLOUD -> {
+                    AccountAndCloudTab(
                         context = context,
+                        userProfile = userProfileText,
+                        cloudStatus = cloudSyncStatus,
                         serviceActive = serviceActive,
                         onToggleService = { active ->
                             serviceActive = active
@@ -297,6 +282,24 @@ fun AndroidCommandCenter(onOpenPermissions: () -> Unit) {
                                 RamyaVoiceForegroundService.startService(context)
                             } else {
                                 RamyaVoiceForegroundService.stopService(context)
+                            }
+                        },
+                        onGuestSignIn = {
+                            coroutineScope.launch {
+                                val res = CloudManager.signInGuest()
+                                res.onSuccess {
+                                    userProfileText = CloudManager.getUserEmail()
+                                    Toast.makeText(context, "Signed in successfully!", Toast.LENGTH_SHORT).show()
+                                }.onFailure {
+                                    Toast.makeText(context, "Sign in ready", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        },
+                        onCheckCloudSync = {
+                            coroutineScope.launch {
+                                val ok = CloudManager.checkSupabaseConnection()
+                                cloudSyncStatus = if (ok) "Cloud Database: Connected & Synced" else "Cloud Database: Reconnecting"
+                                Toast.makeText(context, if (ok) "Cloud Database Verified!" else "Reconnecting...", Toast.LENGTH_SHORT).show()
                             }
                         }
                     )
@@ -318,7 +321,7 @@ fun AndroidCommandCenter(onOpenPermissions: () -> Unit) {
                 value = textPrompt,
                 onValueChange = { textPrompt = it },
                 placeholder = {
-                    Text("Ask Ramya anything or speak...", color = TextMuted, fontSize = 13.sp)
+                    Text("Type a message or tap mic...", color = TextMuted, fontSize = 13.sp)
                 },
                 modifier = Modifier
                     .weight(1f)
@@ -336,7 +339,7 @@ fun AndroidCommandCenter(onOpenPermissions: () -> Unit) {
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
                 keyboardActions = KeyboardActions(onSend = {
                     if (textPrompt.isNotBlank()) {
-                        handleCommand(textPrompt)
+                        executeQuery(textPrompt)
                         textPrompt = ""
                         focusManager.clearFocus()
                     }
@@ -344,7 +347,7 @@ fun AndroidCommandCenter(onOpenPermissions: () -> Unit) {
                 singleLine = true
             )
 
-            // Direct Send Button
+            // Direct Send / Speak Button
             Box(
                 modifier = Modifier
                     .size(44.dp)
@@ -352,12 +355,12 @@ fun AndroidCommandCenter(onOpenPermissions: () -> Unit) {
                     .background(Brush.linearGradient(listOf(NeonCyan, ElectricBlue)))
                     .clickable {
                         if (textPrompt.isNotBlank()) {
-                            handleCommand(textPrompt)
+                            executeQuery(textPrompt)
                             textPrompt = ""
                             focusManager.clearFocus()
                         } else {
                             isListening = !isListening
-                            if (isListening) userTranscript = "Listening for voice..."
+                            if (isListening) userTranscript = "Listening for your voice..."
                         }
                     },
                 contentAlignment = Alignment.Center
@@ -376,6 +379,7 @@ fun AndroidCommandCenter(onOpenPermissions: () -> Unit) {
 @Composable
 fun VoiceAssistantTab(
     isListening: Boolean,
+    isThinking: Boolean,
     scalePulse: Float,
     haloAlpha: Float,
     userTranscript: String,
@@ -394,11 +398,10 @@ fun VoiceAssistantTab(
 
         // --- GLOWING CYBERPUNK ORB ---
         Box(
-            modifier = Modifier
-                .size(190.dp),
+            modifier = Modifier.size(190.dp),
             contentAlignment = Alignment.Center
         ) {
-            // Outer Glowing Halo Ring
+            // Outer Halo Ring
             Box(
                 modifier = Modifier
                     .size(180.dp)
@@ -440,14 +443,14 @@ fun VoiceAssistantTab(
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
-                        text = if (isListening) "LISTENING" else "RAMYA",
+                        text = if (isListening) "LISTENING" else if (isThinking) "THINKING" else "RAMYA",
                         color = Color.Black,
                         fontWeight = FontWeight.Black,
                         fontSize = 13.sp,
                         letterSpacing = 1.sp
                     )
                     Text(
-                        text = if (isListening) "Say command" else "Tap to Speak",
+                        text = if (isListening) "Speak now" else "Tap to Speak",
                         color = Color.Black.copy(alpha = 0.8f),
                         fontSize = 9.sp,
                         fontWeight = FontWeight.SemiBold
@@ -468,7 +471,7 @@ fun VoiceAssistantTab(
             barHeights.forEachIndexed { i, baseH ->
                 val barScale by rememberInfiniteTransition(label = "eq_$i").animateFloat(
                     initialValue = 0.4f,
-                    targetValue = if (isListening) 1.0f else 0.5f,
+                    targetValue = if (isListening || isThinking) 1.0f else 0.45f,
                     animationSpec = infiniteRepeatable(
                         animation = tween(400 + (i * 90), easing = FastOutSlowInEasing),
                         repeatMode = RepeatMode.Reverse
@@ -480,14 +483,14 @@ fun VoiceAssistantTab(
                         .width(4.dp)
                         .height((baseH * barScale).dp)
                         .clip(RoundedCornerShape(2.dp))
-                        .background(if (isListening) NeonPink else NeonCyan)
+                        .background(if (isListening) NeonPink else if (isThinking) NeonAmber else NeonCyan)
                 )
             }
         }
 
         Spacer(modifier = Modifier.height(14.dp))
 
-        // --- QUICK SUGGESTION CHIPS (HORIZONTAL SCROLL) ---
+        // --- QUICK SUGGESTION CHIPS ---
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -495,10 +498,10 @@ fun VoiceAssistantTab(
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             val chips = listOf(
-                "🗣️ Teach me English",
                 "⛅ Weather in Hyderabad",
-                "🎵 Play relaxing beats",
-                "🔄 Translate Telugu",
+                "🗣️ Teach me English",
+                "🔄 Translate: నేను వస్తాను",
+                "🎵 Play relaxing music",
                 "▶️ Open YouTube"
             )
             chips.forEach { chip ->
@@ -526,9 +529,7 @@ fun VoiceAssistantTab(
                 .border(1.dp, NeonCyan.copy(alpha = 0.35f), RoundedCornerShape(14.dp))
         ) {
             Column(modifier = Modifier.padding(14.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("👤 YOU (VOICE / TEXT)", color = NeonCyan, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
-                }
+                Text("👤 YOU", color = NeonCyan, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
                 Spacer(modifier = Modifier.height(6.dp))
                 Text(
                     text = userTranscript,
@@ -555,7 +556,7 @@ fun VoiceAssistantTab(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("🤖 RAMYA AI RESPONSE", color = NeonViolet, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                    Text("🤖 RAMYA AI", color = NeonViolet, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
                     Text("🔊 AUDIO READY", color = NeonGreen, fontSize = 9.sp, fontWeight = FontWeight.Bold)
                 }
                 Spacer(modifier = Modifier.height(6.dp))
@@ -581,7 +582,7 @@ fun TeluguTutorTab(onPracticeSpoken: () -> Unit) {
             .padding(16.dp)
     ) {
         Text("TELUGU ⇄ ENGLISH CONVERSATION STUDIO", color = NeonCyan, fontSize = 13.sp, fontWeight = FontWeight.Black)
-        Text("Daily practical phrases with spaced repetition memory", color = TextSecondary, fontSize = 11.sp)
+        Text("Everyday practical phrases with natural pronunciation", color = TextSecondary, fontSize = 11.sp)
 
         Spacer(modifier = Modifier.height(16.dp))
 
@@ -625,7 +626,7 @@ fun TeluguTutorTab(onPracticeSpoken: () -> Unit) {
                     shape = RoundedCornerShape(8.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("🎙️ Speak & Practice This Phrase", color = Color.White, fontWeight = FontWeight.Bold)
+                    Text("🎙️ Practice This Phrase", color = Color.White, fontWeight = FontWeight.Bold)
                 }
             }
         }
@@ -641,21 +642,21 @@ fun TeluguTutorTab(onPracticeSpoken: () -> Unit) {
                 .border(1.dp, CyberpunkCardBorder, RoundedCornerShape(16.dp))
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
-                Text("SPACED REPETITION REVISION", color = TextPrimary, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                Text("DAILY REVISION", color = TextPrimary, fontSize = 13.sp, fontWeight = FontWeight.Bold)
                 Spacer(modifier = Modifier.height(6.dp))
                 Text(
-                    text = "Yesterday: 'I will be there in ten minutes.' ('నేను పది నిమిషాల్లో వస్తాను')",
+                    text = "Previous: 'I will be there in ten minutes.' ('నేను పది నిమిషాల్లో వస్తాను')",
                     color = TextSecondary,
                     fontSize = 13.sp
                 )
-                Spacer(modifier = Modifier.height(10.dp))
+                Spacer(modifier = Modifier.height(12.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedButton(
                         onClick = onPracticeSpoken,
                         shape = RoundedCornerShape(8.dp),
                         modifier = Modifier.weight(1f)
                     ) {
-                        Text("🔊 Hear Audio", color = NeonCyan, fontSize = 12.sp)
+                        Text("🔊 Listen", color = NeonCyan, fontSize = 12.sp)
                     }
                     Button(
                         onClick = onPracticeSpoken,
@@ -672,10 +673,14 @@ fun TeluguTutorTab(onPracticeSpoken: () -> Unit) {
 }
 
 @Composable
-fun ToolsAndStatusTab(
+fun AccountAndCloudTab(
     context: android.content.Context,
+    userProfile: String,
+    cloudStatus: String,
     serviceActive: Boolean,
-    onToggleService: (Boolean) -> Unit
+    onToggleService: (Boolean) -> Unit,
+    onGuestSignIn: () -> Unit,
+    onCheckCloudSync: () -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -683,8 +688,63 @@ fun ToolsAndStatusTab(
             .verticalScroll(rememberScrollState())
             .padding(16.dp)
     ) {
-        Text("SYSTEM AUTOMATION & CLOUD STATUS", color = ElectricBlue, fontSize = 13.sp, fontWeight = FontWeight.Black)
-        Text("Phone permissions, background listener & hybrid telemetry", color = TextSecondary, fontSize = 11.sp)
+        Text("ACCOUNT, CLOUD & PHONE CONTROLS", color = ElectricBlue, fontSize = 13.sp, fontWeight = FontWeight.Black)
+        Text("User profile, cloud synchronization & quick apps", color = TextSecondary, fontSize = 11.sp)
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Profile & Cloud Account Card
+        Card(
+            colors = CardDefaults.cardColors(containerColor = CyberpunkCard),
+            shape = RoundedCornerShape(14.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .border(1.dp, NeonCyan.copy(alpha = 0.4f), RoundedCornerShape(14.dp))
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text("USER ACCOUNT & SECURITY", color = NeonCyan, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.height(8.dp))
+                
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text(userProfile, color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                        Text("Firebase & Google Services Protected", color = TextSecondary, fontSize = 11.sp)
+                    }
+                    Button(
+                        onClick = onGuestSignIn,
+                        colors = ButtonDefaults.buttonColors(containerColor = CyberpunkSurface),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.border(1.dp, CyberpunkCardBorder, RoundedCornerShape(8.dp))
+                    ) {
+                        Text("Sign In", color = NeonCyan, fontSize = 11.sp)
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+                HorizontalDivider(color = CyberpunkCardBorder)
+                Spacer(modifier = Modifier.height(14.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(cloudStatus, color = NeonGreen, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                    OutlinedButton(
+                        onClick = onCheckCloudSync,
+                        shape = RoundedCornerShape(8.dp),
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                        modifier = Modifier.height(30.dp)
+                    ) {
+                        Text("Sync", color = NeonCyan, fontSize = 11.sp)
+                    }
+                }
+            }
+        }
 
         Spacer(modifier = Modifier.height(16.dp))
 
@@ -704,9 +764,9 @@ fun ToolsAndStatusTab(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column(modifier = Modifier.weight(1f)) {
-                    Text("24/7 Wake Word Listening", color = TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                    Text("24/7 Voice Wake Detection", color = TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.Bold)
                     Text(
-                        if (serviceActive) "● Active in Background (Hey Ramya ready)" else "○ Paused (Saves battery)",
+                        if (serviceActive) "● Active in Background ('Hey Ramya' ready)" else "○ Standby Mode (Saves battery)",
                         color = if (serviceActive) NeonGreen else TextSecondary,
                         fontSize = 12.sp
                     )
@@ -754,37 +814,6 @@ fun ToolsAndStatusTab(
                     .border(1.dp, CyberpunkCardBorder, RoundedCornerShape(10.dp))
             ) {
                 Text("📞 Phone", color = NeonGreen, fontSize = 12.sp)
-            }
-        }
-
-        Spacer(modifier = Modifier.height(20.dp))
-
-        // Cloud & Telemetry Card
-        Card(
-            colors = CardDefaults.cardColors(containerColor = CyberpunkSurface),
-            shape = RoundedCornerShape(14.dp),
-            modifier = Modifier
-                .fillMaxWidth()
-                .border(1.dp, CyberpunkCardBorder, RoundedCornerShape(14.dp))
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Text("TELEMETRY & CLOUD STATUS", color = TextSecondary, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                Spacer(modifier = Modifier.height(10.dp))
-                
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text("Firebase Project", color = TextSecondary, fontSize = 12.sp)
-                    Text("ramya-ai-b22e4 (Active)", color = NeonGreen, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                }
-                Spacer(modifier = Modifier.height(6.dp))
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text("Supabase Cloud Sync", color = TextSecondary, fontSize = 12.sp)
-                    Text("Connected", color = NeonCyan, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                }
-                Spacer(modifier = Modifier.height(6.dp))
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text("Local Offline Core", color = TextSecondary, fontSize = 12.sp)
-                    Text("Gemma 3 4B (Zero Latency)", color = NeonAmber, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                }
             }
         }
     }
