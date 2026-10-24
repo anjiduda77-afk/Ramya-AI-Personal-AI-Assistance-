@@ -3,6 +3,10 @@ package ai.ramya.assistant.data
 import ai.ramya.assistant.BuildConfig
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseUser
+import com.google.firebase.auth.GoogleAuthProvider
+import com.google.firebase.firestore.FieldValue
+import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.SetOptions
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
@@ -14,7 +18,15 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 
+/**
+ * Cloud backend manager for Ramya AI.
+ * Handles Firebase Authentication (Google Sign-In & Anonymous),
+ * Cloud Firestore Database sync (ramya-ai-b22e4), and high-intelligence AI reasoning.
+ */
 object CloudManager {
+    const val FIREBASE_PROJECT_ID = "ramya-ai-b22e4"
+    const val FIREBASE_APP_ID = "1:693743485680:android:9ae48ae8c059a8be52b835"
+
     private const val SUPABASE_URL = "https://bhevseipgkqfvxkeohbj.supabase.co"
     private const val SUPABASE_KEY = "sb_publishable_LSXD7oaw-jjRwvUFl1dqVw_jwUHX-nB"
 
@@ -24,32 +36,140 @@ object CloudManager {
         .readTimeout(6, TimeUnit.SECONDS)
         .build()
 
-    // 1. FIREBASE AUTHENTICATION
+    // 1. FIREBASE AUTHENTICATION & FIRESTORE DATABASE
     private val auth: FirebaseAuth by lazy { FirebaseAuth.getInstance() }
+    private val firestore: FirebaseFirestore by lazy { FirebaseFirestore.getInstance() }
 
     fun getCurrentUser(): FirebaseUser? = auth.currentUser
+
+    fun getUserDisplayName(): String {
+        val user = auth.currentUser
+        return when {
+            user == null -> "Guest User"
+            !user.displayName.isNullOrBlank() -> user.displayName ?: "Ramya User"
+            !user.email.isNullOrBlank() -> user.email ?: "Ramya User"
+            user.isAnonymous -> "Guest Member"
+            else -> "Ramya Member"
+        }
+    }
 
     fun getUserEmail(): String {
         val user = auth.currentUser
         return when {
             user == null -> "Guest User"
-            user.isAnonymous -> "Guest Member"
-            !user.email.isNullOrBlank() -> user.email ?: "Ramya Member"
-            else -> "Ramya Member"
+            !user.email.isNullOrBlank() -> user.email ?: "Signed in via Google"
+            user.isAnonymous -> "Guest Account"
+            else -> "Active Member"
         }
     }
 
     suspend fun signInGuest(): Result<String> = withContext(Dispatchers.IO) {
         try {
             val result = auth.signInAnonymously().await()
-            val uid = result.user?.uid ?: "guest"
-            Result.success("Signed in as Guest ($uid)")
+            val user = result.user
+            if (user != null) {
+                saveUserProfile(user)
+                Result.success("Signed in as Guest (${user.uid})")
+            } else {
+                Result.failure(Exception("Guest sign-in returned null user"))
+            }
         } catch (e: Exception) {
             Result.failure(e)
         }
     }
 
-    // 2. SUPABASE CLOUD DATABASE & AUTH CHECK
+    suspend fun signInWithGoogleCredential(idToken: String): Result<FirebaseUser> = withContext(Dispatchers.IO) {
+        try {
+            val credential = GoogleAuthProvider.getCredential(idToken, null)
+            val authResult = auth.signInWithCredential(credential).await()
+            val user = authResult.user ?: throw Exception("Google user is null")
+            saveUserProfile(user)
+            Result.success(user)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    fun signOut() {
+        auth.signOut()
+    }
+
+    // 2. FIRESTORE DATABASE OPERATIONS (ramya-ai-b22e4)
+
+    suspend fun saveUserProfile(user: FirebaseUser) = withContext(Dispatchers.IO) {
+        try {
+            val userDoc = firestore.collection("users").document(user.uid)
+            val profileData = hashMapOf(
+                "uid" to user.uid,
+                "displayName" to (user.displayName ?: "Ramya User"),
+                "email" to (user.email ?: ""),
+                "photoUrl" to (user.photoUrl?.toString() ?: ""),
+                "providerId" to (user.providerData.firstOrNull()?.providerId ?: "firebase"),
+                "updatedAt" to FieldValue.serverTimestamp()
+            )
+            userDoc.set(profileData, SetOptions.merge()).await()
+        } catch (_: Exception) {
+            // Non-blocking firestore sync
+        }
+    }
+
+    suspend fun saveConversation(userPrompt: String, assistantReply: String) = withContext(Dispatchers.IO) {
+        val uid = auth.currentUser?.uid ?: return@withContext
+        try {
+            val docRef = firestore.collection("users")
+                .document(uid)
+                .collection("conversations")
+                .document()
+
+            val convData = hashMapOf(
+                "id" to docRef.id,
+                "userTranscript" to userPrompt.take(2000),
+                "assistantResponse" to assistantReply.take(5000),
+                "timestamp" to FieldValue.serverTimestamp()
+            )
+            docRef.set(convData).await()
+        } catch (_: Exception) {
+            // Non-blocking firestore sync
+        }
+    }
+
+    suspend fun saveMemory(memoryText: String, category: String = "preference") = withContext(Dispatchers.IO) {
+        val uid = auth.currentUser?.uid ?: return@withContext
+        try {
+            val docRef = firestore.collection("users")
+                .document(uid)
+                .collection("memories")
+                .document()
+
+            val memoryData = hashMapOf(
+                "id" to docRef.id,
+                "memoryText" to memoryText.take(1000),
+                "category" to category,
+                "updatedAt" to FieldValue.serverTimestamp()
+            )
+            docRef.set(memoryData).await()
+        } catch (_: Exception) {
+            // Non-blocking firestore sync
+        }
+    }
+
+    suspend fun checkFirestoreConnection(): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val uid = auth.currentUser?.uid
+            if (uid != null) {
+                val snapshot = firestore.collection("users").document(uid).get().await()
+                snapshot != null
+            } else {
+                // If not signed in yet, test signing in anonymously first
+                val result = auth.signInAnonymously().await()
+                result.user != null
+            }
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    // 3. SUPABASE CLOUD DATABASE FALLBACK
     suspend fun checkSupabaseConnection(): Boolean = withContext(Dispatchers.IO) {
         try {
             val request = Request.Builder()
@@ -69,7 +189,7 @@ object CloudManager {
         }
     }
 
-    // 3. LIVE WEATHER TELEMETRY (HYDERABAD & INDIA)
+    // 4. LIVE WEATHER TELEMETRY (HYDERABAD & INDIA)
     suspend fun fetchLiveWeather(): String = withContext(Dispatchers.IO) {
         try {
             val url = "https://api.open-meteo.com/v1/forecast?latitude=17.3850&longitude=78.4867&current=temperature_2m,relative_humidity_2m,weather_code"
@@ -94,29 +214,41 @@ object CloudManager {
         "The weather in Hyderabad is 28°C and clear. A pleasant day outside!"
     }
 
-    // 4. HIGH-SPEED, HIGH HUMAN-INTELLIGENCE AI (SUB-SECOND FLAGSHIP MODELS)
+    // 5. HIGH-SPEED, HIGH HUMAN-INTELLIGENCE AI (SUB-SECOND FLAGSHIP MODELS)
     suspend fun askRamya(prompt: String): String = withContext(Dispatchers.IO) {
         val cleanPrompt = prompt.trim()
         val lower = cleanPrompt.lowercase()
 
         // Tier 1: Instant 0ms Human-Like Natural Handlers
         if (lower.contains("weather")) {
-            return@withContext fetchLiveWeather()
+            val weatherReply = fetchLiveWeather()
+            saveConversation(cleanPrompt, weatherReply)
+            return@withContext weatherReply
         }
         if (lower.contains("who are you") || lower.contains("your name")) {
-            return@withContext "Namaskaram! I am Ramya, your personal voice companion and English learning tutor. I am here to assist you with conversations, reminders, translations, and daily tasks."
+            val reply = "Namaskaram! I am Ramya, your personal voice companion and English learning tutor. I am powered by Firebase and advanced AI intelligence."
+            saveConversation(cleanPrompt, reply)
+            return@withContext reply
         }
         if (lower.contains("telugu") || lower.contains("translate")) {
-            return@withContext getTeluguTranslationResponse(cleanPrompt)
+            val reply = getTeluguTranslationResponse(cleanPrompt)
+            saveConversation(cleanPrompt, reply)
+            return@withContext reply
         }
         if (lower.contains("music") || lower.contains("relax") || lower.contains("song")) {
-            return@withContext "Playing peaceful ambient beats. Take a deep breath and relax."
+            val reply = "Playing peaceful ambient beats. Take a deep breath and relax."
+            saveConversation(cleanPrompt, reply)
+            return@withContext reply
         }
         if (lower.contains("how are you") || lower.contains("ela unnaru")) {
-            return@withContext "I am doing wonderfully, thank you for asking! How is your day going so far?"
+            val reply = "I am doing wonderfully, thank you for asking! How is your day going so far?"
+            saveConversation(cleanPrompt, reply)
+            return@withContext reply
         }
         if (lower.contains("good morning") || lower.contains("shubhodayam")) {
-            return@withContext "Shubhodayam! Good morning. I hope your day is filled with joy and productivity. What would you like to start with?"
+            val reply = "Shubhodayam! Good morning. I hope your day is filled with joy and productivity. What would you like to start with?"
+            saveConversation(cleanPrompt, reply)
+            return@withContext reply
         }
 
         // Tier 2: Sub-Second High-Intelligence Cloud API (GPT-4o Mini with DeepSeek Fallback)
@@ -161,24 +293,28 @@ object CloudManager {
                                 val msg = choices.getJSONObject(0).optJSONObject("message")
                                 val content = msg?.optString("content")
                                 if (!content.isNullOrBlank()) {
-                                    return@withContext content.trim()
+                                    val reply = content.trim()
+                                    saveConversation(cleanPrompt, reply)
+                                    return@withContext reply
                                 }
                             }
                         }
                     } else {
                         res.close()
                     }
-                } catch (e: Exception) {
+                } catch (_: Exception) {
                     // Try next high intelligence model
                 }
             }
         }
 
         // Tier 3: Thoughtful High-Quality Response
-        "I have noted: \"$cleanPrompt\". I am right here with you—what would you like to do next?"
+        val fallbackReply = "I have noted: \"$cleanPrompt\". I am right here with you—what would you like to do next?"
+        saveConversation(cleanPrompt, fallbackReply)
+        fallbackReply
     }
 
-    // 5. TELUGU TO NATURAL IDIOMATIC ENGLISH TRANSLATIONS
+    // 6. TELUGU TO NATURAL IDIOMATIC ENGLISH TRANSLATIONS
     fun getTeluguTranslationResponse(prompt: String): String {
         val lower = prompt.lowercase()
         return when {

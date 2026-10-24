@@ -1,0 +1,116 @@
+rules_version = '2';
+
+// ===============================================================
+// Assumed Data Model
+// ===============================================================
+//
+// This security rules file assumes the following data structures:
+//
+// 1. /users/{userId}
+//    - uid: string (required, immutable, matches document id)
+//    - displayName: string (optional, max 100 chars)
+//    - email: string (optional, max 255 chars)
+//    - photoUrl: string (optional, max 500 chars)
+//    - providerId: string (required, e.g. "google.com" or "anonymous")
+//    - createdAt: timestamp (required on create)
+//    - updatedAt: timestamp (required on create and update)
+//
+// 2. /users/{userId}/conversations/{conversationId}
+//    - id: string (required)
+//    - userTranscript: string (required, max 2000 chars)
+//    - assistantResponse: string (required, max 5000 chars)
+//    - timestamp: timestamp (required)
+//
+// 3. /users/{userId}/memories/{memoryId}
+//    - id: string (required)
+//    - memoryText: string (required, max 1000 chars)
+//    - category: string (required, e.g. "preference", "fact", "study")
+//    - updatedAt: timestamp (required)
+//
+// 4. /users/{userId}/preferences/{prefId}
+//    - theme: string (optional)
+//    - voiceRate: number (optional)
+//    - voicePitch: number (optional)
+//    - backgroundListening: bool (optional)
+//    - updatedAt: timestamp (required)
+// ===============================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Default deny for all unmatched paths
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null && request.auth.uid != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isValidUser(data, userId) {
+      return data.uid == userId
+        && data.providerId is string
+        && data.updatedAt is timestamp
+        && (!('displayName' in data) || data.displayName is string)
+        && (!('email' in data) || data.email is string)
+        && (!('photoUrl' in data) || data.photoUrl is string);
+    }
+
+    function isValidConversation(data) {
+      return data.userTranscript is string
+        && data.assistantResponse is string
+        && data.timestamp is timestamp;
+    }
+
+    function isValidMemory(data) {
+      return data.memoryText is string
+        && data.category is string
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidPreference(data) {
+      return data.updatedAt is timestamp
+        && (!('theme' in data) || data.theme is string)
+        && (!('voiceRate' in data) || data.voiceRate is number)
+        && (!('voicePitch' in data) || data.voicePitch is number)
+        && (!('backgroundListening' in data) || data.backgroundListening is bool);
+    }
+
+    // User Profile Document
+    match /users/{userId} {
+      allow read: if isOwner(userId);
+      allow create: if isOwner(userId) && isValidUser(request.resource.data, userId);
+      allow update: if isOwner(userId) && isValidUser(request.resource.data, userId) && request.resource.data.uid == resource.data.uid;
+      allow delete: if isOwner(userId);
+
+      // User Conversations Subcollection
+      match /conversations/{conversationId} {
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId) && isValidConversation(request.resource.data);
+        allow update: if isOwner(userId) && isValidConversation(request.resource.data);
+        allow delete: if isOwner(userId);
+      }
+
+      // User Personal Memories Subcollection
+      match /memories/{memoryId} {
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId) && isValidMemory(request.resource.data);
+        allow update: if isOwner(userId) && isValidMemory(request.resource.data);
+        allow delete: if isOwner(userId);
+      }
+
+      // User Preferences Subcollection
+      match /preferences/{prefId} {
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId) && isValidPreference(request.resource.data);
+        allow update: if isOwner(userId) && isValidPreference(request.resource.data);
+        allow delete: if isOwner(userId);
+      }
+    }
+  }
+}
