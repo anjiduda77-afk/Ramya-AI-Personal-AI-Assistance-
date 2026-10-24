@@ -8,14 +8,14 @@ import { api, UserProfile } from './api';
 
 // Configurable via Vite environment variables
 const SUPABASE_URL = (import.meta as any).env?.VITE_SUPABASE_URL || 'https://placeholder-project.supabase.co';
-const SUPABASE_ANON_KEY = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY || 'placeholder-anon-key';
+const SUPABASE_ANON_KEY = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY || (import.meta as any).env?.VITE_SUPABASE_PUBLISHABLE_KEY || 'placeholder-anon-key';
 
 export const isSupabaseConfigured = (): boolean => {
   return (
     Boolean(SUPABASE_URL) &&
     Boolean(SUPABASE_ANON_KEY) &&
-    !SUPABASE_URL.includes('placeholder-project') &&
-    !SUPABASE_ANON_KEY.includes('placeholder-anon-key')
+    !SUPABASE_URL.includes('placeholder') &&
+    !SUPABASE_ANON_KEY.includes('placeholder')
   );
 };
 
