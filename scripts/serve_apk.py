@@ -6,6 +6,7 @@ from pathlib import Path
 
 PORT = 8888
 APK_PATH = Path("c:/mern stack/mernpro/ramya/apps/android/app/build/outputs/apk/debug/app-debug.apk")
+WIN_PATH = Path("c:/mern stack/mernpro/ramya/apps/desktop/public/ramya-ai-windows-v1.0.0.zip")
 
 def get_ip():
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -30,6 +31,16 @@ class ApkDownloadHandler(http.server.BaseHTTPRequestHandler):
             self.send_header("Content-Disposition", 'attachment; filename="RamyaAI-Assistant-v1.0.0.apk"')
             self.send_header("Content-Length", str(size))
             self.end_headers()
+        elif self.path in ["/windows", "/ramya-ai-windows.zip", "/ramya-ai-windows-v1.0.0.zip"]:
+            if not WIN_PATH.exists():
+                self.send_error(404, "Windows package not found.")
+                return
+            size = WIN_PATH.stat().st_size
+            self.send_response(200)
+            self.send_header("Content-Type", "application/zip")
+            self.send_header("Content-Disposition", 'attachment; filename="RamyaAI-Windows-v1.0.0.zip"')
+            self.send_header("Content-Length", str(size))
+            self.end_headers()
         else:
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
@@ -49,6 +60,21 @@ class ApkDownloadHandler(http.server.BaseHTTPRequestHandler):
             self.end_headers()
             
             with open(APK_PATH, "rb") as f:
+                while chunk := f.read(65536):
+                    self.wfile.write(chunk)
+            return
+
+        if self.path in ["/windows", "/ramya-ai-windows.zip", "/ramya-ai-windows-v1.0.0.zip"]:
+            if not WIN_PATH.exists():
+                self.send_error(404, "Windows package not found.")
+                return
+            size = WIN_PATH.stat().st_size
+            self.send_response(200)
+            self.send_header("Content-Type", "application/zip")
+            self.send_header("Content-Disposition", 'attachment; filename="RamyaAI-Windows-v1.0.0.zip"')
+            self.send_header("Content-Length", str(size))
+            self.end_headers()
+            with open(WIN_PATH, "rb") as f:
                 while chunk := f.read(65536):
                     self.wfile.write(chunk)
             return
@@ -178,13 +204,16 @@ class ApkDownloadHandler(http.server.BaseHTTPRequestHandler):
             </div>
         </div>
 
-        <a href="/ramya-ai.apk" class="btn">⬇️ Download APK File</a>
+        <div style="display: flex; flex-direction: column; gap: 12px; margin-bottom: 24px;">
+            <a href="/ramya-ai-v1.0.0.apk" class="btn" style="margin-bottom: 0;">📱 Download Android APK (v1.0.0)</a>
+            <a href="/ramya-ai-windows-v1.0.0.zip" class="btn" style="background: linear-gradient(135deg, #059669 0%, #10b981 100%); margin-bottom: 0;">🪟 Download Windows Package (v1.0.0)</a>
+        </div>
 
-        <div style="margin: 20px 0; background: #ffffff; padding: 14px; border-radius: 18px; display: inline-block;">
-            <img src="https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=http://{ip}:{PORT}/ramya-ai.apk" alt="Scan with Phone Camera" width="180" height="180" style="display:block; border-radius: 8px;">
+        <div style="margin: 16px 0; background: #ffffff; padding: 14px; border-radius: 18px; display: inline-block;">
+            <img src="https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=http://{ip}:{PORT}/ramya-ai-v1.0.0.apk" alt="Scan with Phone Camera" width="180" height="180" style="display:block; border-radius: 8px;">
         </div>
         <p style="font-size: 13px; color: #38bdf8; font-weight: 600; margin-bottom: 16px;">
-            📱 Scan with phone camera to download instantly
+            📱 Scan with phone camera to download Android APK instantly
         </p>
 
         <p class="footer-note">

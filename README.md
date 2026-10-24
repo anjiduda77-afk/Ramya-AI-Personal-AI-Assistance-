@@ -12,49 +12,51 @@
 
 ---
 
+---
+
 ## 📥 Downloads & Version Releases
 
-Download the official Ramya AI builds for your devices. Android APK releases are versioned and can be downloaded directly over Wi-Fi, installed via USB ADB, or retrieved from GitHub Releases.
-
-### 📱 Android APK Version Archive
-
-| Version | Release Date | Status | Package Name | APK Download Link | Size | SHA-256 Checksum | Min Requirements |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **v1.0.0** | 2026-10-24 | 🟢 **Latest Stable** | `ai.ramya.assistant` | [Download ramya-ai-v1.0.0.apk](https://github.com/anjiduda77-afk/Ramya-AI-Personal-AI-Assistance-/releases/download/v1.0.0/ramya-ai-v1.0.0.apk) | 10.4 MB | `0135490CE6BCA8F9A52D602ECAEE37F5F134DC521618DFA67EAB2F8C4F39D168` | Android 8.0+ (API 26) |
-
-#### 🌟 What's New in Version 1.0.0 (First Official Release):
-- **Firebase & Google Services**: Integrated `google-services.json` for Firebase Project `ramya-ai-b22e4`.
-- **Hybrid Cloud Sync**: Supabase `@supabase/server` sync outbox with verified JWT credentials.
-- **Voice-First AI**: Foreground continuous listening service on Android + floating cyberpunk orb on Windows.
-- **Offline & Cloud Intelligence**: Gemma 3 4B (Ollama) with automatic failover to Google Gemini, OpenAI, and xAI Grok.
-- **Telugu-to-English Tutor**: Conversational Telugu voice translation and spaced repetition learning cards.
-- **Personal Memory Vault**: User-controlled SQLite storage with full privacy and zero model leakage.
+Official versioned downloads for **Android** and **Windows**.
 
 ---
 
-### 📲 How to Download & Install on Your Phone
+### 📱 1. Android APK Downloads (v1.0.0)
 
-#### Method 1: Direct Wi-Fi Download (No USB Required)
-1. Run the local download server on your computer:
+| Package Format | Version | Status | Package Name | Direct APK Download Link | Size | SHA-256 Checksum |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **Android APK** | **v1.0.0** | 🟢 **Stable Release** | `ai.ramya.assistant` | [Download ramya-ai-v1.0.0.apk](https://github.com/anjiduda77-afk/Ramya-AI-Personal-AI-Assistance-/releases/download/v1.0.0/ramya-ai-v1.0.0.apk) | 10.4 MB | `0135490CE6BCA8F9A52D602ECAEE37F5F134DC521618DFA67EAB2F8C4F39D168` |
+
+#### 📲 How to Install APK on Your Phone:
+1. **Wireless Download (Same Wi-Fi)**:
+   - On your phone browser, open:
+     ```text
+     http://172.21.210.153:8888/ramya-ai-v1.0.0.apk
+     ```
+   - Or open `http://172.21.210.153:8888/` on your computer and scan the QR code with your phone camera.
+2. **Local Web App Direct Link**:
+   - [`http://localhost:5173/ramya-ai-v1.0.0.apk`](http://localhost:5173/ramya-ai-v1.0.0.apk)
+3. **USB ADB Install**:
    ```powershell
-   python scripts/serve_apk.py
+   adb install -r "apps\android\app\build\outputs\apk\debug\app-debug.apk"
    ```
-2. On your phone's browser (Chrome / Samsung Internet), navigate to:
-   ```text
-   http://172.21.210.153:8888/ramya-ai-v1.0.0.apk
-   ```
-   *(Or open `http://172.21.210.153:8888/` on your computer and scan the QR code with your phone camera).*
-3. When prompted, tap **"Download Anyway"** and tap the downloaded file to install.
 
-#### Method 2: Local Vite Development Server Download
-When running the desktop application (`npm run dev` in `apps/desktop`):
-- Direct Browser URL: [`http://localhost:5173/ramya-ai-v1.0.0.apk`](http://localhost:5173/ramya-ai-v1.0.0.apk)
+---
 
-#### Method 3: USB ADB One-Click Install
-Connect your phone with USB debugging enabled and run:
-```powershell
-adb install -r "apps\android\app\build\outputs\apk\debug\app-debug.apk"
-```
+### 🪟 2. Windows Desktop Downloads & Launcher (v1.0.0)
+
+| Platform Package | Version | Status | Download / Launch Link | Size | Requirements |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Windows One-Click Launcher** | **v1.0.0** | 🟢 **Ready** | [start_ramya_windows.bat](start_ramya_windows.bat) | 1 KB | Windows 10/11 |
+| **Windows Portable ZIP** | **v1.0.0** | 🟢 **Ready** | [Download ramya-ai-windows-v1.0.0.zip](https://github.com/anjiduda77-afk/Ramya-AI-Personal-AI-Assistance-/releases/download/v1.0.0/ramya-ai-windows-v1.0.0.zip) | 11 KB | Python 3.10+, Node.js |
+| **Desktop Web PWA App** | **v1.0.0** | 🟢 **Live** | [Open Desktop UI (http://localhost:5173)](http://localhost:5173) | Instant | Chrome / Edge Browser |
+
+#### 🖥️ How to Run on Windows:
+1. **Double-Click Launcher**:
+   - Double-click `start_ramya_windows.bat` in the project root folder.
+   - It automatically starts the backend API, the desktop interface, and opens your browser.
+2. **PWA Native Desktop App**:
+   - Open `http://localhost:5173/` in Chrome or Edge.
+   - Click the **"Install Ramya AI"** icon in the address bar to install it as an independent desktop window app with taskbar shortcut.
 
 ---
 
