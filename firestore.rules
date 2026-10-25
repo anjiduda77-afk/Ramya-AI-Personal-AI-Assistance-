@@ -1,38 +1,11 @@
 rules_version = '2';
 
 // ===============================================================
-// Assumed Data Model
+// Ramya AI Production Cloud Firestore Security Rules
 // ===============================================================
-//
-// This security rules file assumes the following data structures:
-//
-// 1. /users/{userId}
-//    - uid: string (required, immutable, matches document id)
-//    - displayName: string (optional, max 100 chars)
-//    - email: string (optional, max 255 chars)
-//    - photoUrl: string (optional, max 500 chars)
-//    - providerId: string (required, e.g. "google.com" or "anonymous")
-//    - createdAt: timestamp (required on create)
-//    - updatedAt: timestamp (required on create and update)
-//
-// 2. /users/{userId}/conversations/{conversationId}
-//    - id: string (required)
-//    - userTranscript: string (required, max 2000 chars)
-//    - assistantResponse: string (required, max 5000 chars)
-//    - timestamp: timestamp (required)
-//
-// 3. /users/{userId}/memories/{memoryId}
-//    - id: string (required)
-//    - memoryText: string (required, max 1000 chars)
-//    - category: string (required, e.g. "preference", "fact", "study")
-//    - updatedAt: timestamp (required)
-//
-// 4. /users/{userId}/preferences/{prefId}
-//    - theme: string (optional)
-//    - voiceRate: number (optional)
-//    - voicePitch: number (optional)
-//    - backgroundListening: bool (optional)
-//    - updatedAt: timestamp (required)
+// Strict user-level access controls: users can only read and write
+// their own profile, conversations, messages, RAG documents, memories,
+// and preferences.
 // ===============================================================
 
 service cloud.firestore {
@@ -43,7 +16,7 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
-    // Helper functions
+    // Authentication and ownership helpers
     function isAuthenticated() {
       return request.auth != null && request.auth.uid != null;
     }
@@ -55,27 +28,36 @@ service cloud.firestore {
     function isValidUser(data, userId) {
       return data.uid == userId
         && data.providerId is string
-        && data.updatedAt is timestamp
         && (!('displayName' in data) || data.displayName is string)
         && (!('email' in data) || data.email is string)
         && (!('photoUrl' in data) || data.photoUrl is string);
     }
 
     function isValidConversation(data) {
-      return data.userTranscript is string
-        && data.assistantResponse is string
-        && data.timestamp is timestamp;
+      return (!('id' in data) || data.id is string)
+        && (!('title' in data) || data.title is string)
+        && (!('userTranscript' in data) || data.userTranscript is string)
+        && (!('assistantResponse' in data) || data.assistantResponse is string);
+    }
+
+    function isValidMessage(data) {
+      return data.sender is string
+        && data.text is string;
+    }
+
+    function isValidDocument(data) {
+      return data.name is string
+        && (!('sizeBytes' in data) || data.sizeBytes is number)
+        && (!('chunkCount' in data) || data.chunkCount is number);
     }
 
     function isValidMemory(data) {
       return data.memoryText is string
-        && data.category is string
-        && data.updatedAt is timestamp;
+        && (!('category' in data) || data.category is string);
     }
 
     function isValidPreference(data) {
-      return data.updatedAt is timestamp
-        && (!('theme' in data) || data.theme is string)
+      return (!('theme' in data) || data.theme is string)
         && (!('voiceRate' in data) || data.voiceRate is number)
         && (!('voicePitch' in data) || data.voicePitch is number)
         && (!('backgroundListening' in data) || data.backgroundListening is bool);
@@ -85,30 +67,41 @@ service cloud.firestore {
     match /users/{userId} {
       allow read: if isOwner(userId);
       allow create: if isOwner(userId) && isValidUser(request.resource.data, userId);
-      allow update: if isOwner(userId) && isValidUser(request.resource.data, userId) && request.resource.data.uid == resource.data.uid;
+      allow update: if isOwner(userId) && isValidUser(request.resource.data, userId);
       allow delete: if isOwner(userId);
 
-      // User Conversations Subcollection
+      // User Multi-Chat Conversations Subcollection
       match /conversations/{conversationId} {
         allow read: if isOwner(userId);
-        allow create: if isOwner(userId) && isValidConversation(request.resource.data);
-        allow update: if isOwner(userId) && isValidConversation(request.resource.data);
+        allow create, update: if isOwner(userId) && isValidConversation(request.resource.data);
+        allow delete: if isOwner(userId);
+
+        // Messages Subcollection within a Conversation
+        match /messages/{messageId} {
+          allow read: if isOwner(userId);
+          allow create, update: if isOwner(userId) && isValidMessage(request.resource.data);
+          allow delete: if isOwner(userId);
+        }
+      }
+
+      // User Knowledge Base RAG Documents Subcollection
+      match /documents/{documentId} {
+        allow read: if isOwner(userId);
+        allow create, update: if isOwner(userId) && isValidDocument(request.resource.data);
         allow delete: if isOwner(userId);
       }
 
       // User Personal Memories Subcollection
       match /memories/{memoryId} {
         allow read: if isOwner(userId);
-        allow create: if isOwner(userId) && isValidMemory(request.resource.data);
-        allow update: if isOwner(userId) && isValidMemory(request.resource.data);
+        allow create, update: if isOwner(userId) && isValidMemory(request.resource.data);
         allow delete: if isOwner(userId);
       }
 
       // User Preferences Subcollection
       match /preferences/{prefId} {
         allow read: if isOwner(userId);
-        allow create: if isOwner(userId) && isValidPreference(request.resource.data);
-        allow update: if isOwner(userId) && isValidPreference(request.resource.data);
+        allow create, update: if isOwner(userId) && isValidPreference(request.resource.data);
         allow delete: if isOwner(userId);
       }
     }

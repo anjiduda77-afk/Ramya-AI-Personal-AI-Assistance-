@@ -12,6 +12,10 @@ if (localPropertiesFile.exists()) {
     localProperties.load(localPropertiesFile.inputStream())
 }
 val openRouterKey: String = localProperties.getProperty("OPENROUTER_KEY", "")
+val googleClientId: String = localProperties.getProperty(
+    "GOOGLE_CLIENT_ID",
+    "772122699149-o6ead31g3hrem9s940qojjtpqm5peitq.apps.googleusercontent.com"
+)
 
 android {
     namespace = "ai.ramya.assistant"
@@ -21,10 +25,11 @@ android {
         applicationId = "ai.ramya.assistant"
         minSdk = 26
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 2
+        versionName = "1.0.1"
 
         buildConfigField("String", "OPENROUTER_KEY", "\"$openRouterKey\"")
+        buildConfigField("String", "GOOGLE_CLIENT_ID", "\"$googleClientId\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -76,6 +81,7 @@ dependencies {
     // Coroutines & Networking
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("io.coil-kt:coil-compose:2.6.0")
 
     // Firebase (Authentication & Firestore Database)
     implementation(platform("com.google.firebase:firebase-bom:33.7.0"))

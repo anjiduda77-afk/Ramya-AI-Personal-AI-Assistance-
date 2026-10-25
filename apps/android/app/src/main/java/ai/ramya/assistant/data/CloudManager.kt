@@ -90,8 +90,59 @@ object CloudManager {
         }
     }
 
+    suspend fun signInWithEmailPassword(email: String, pass: String): Result<FirebaseUser> = withContext(Dispatchers.IO) {
+        try {
+            val authResult = auth.signInWithEmailAndPassword(email.trim(), pass).await()
+            val user = authResult.user ?: throw Exception("Signed in user is null")
+            saveUserProfile(user)
+            Result.success(user)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun signUpWithEmailPassword(email: String, pass: String, displayName: String): Result<FirebaseUser> = withContext(Dispatchers.IO) {
+        try {
+            val authResult = auth.createUserWithEmailAndPassword(email.trim(), pass).await()
+            val user = authResult.user ?: throw Exception("Registered user is null")
+            if (displayName.isNotBlank()) {
+                val profileUpdates = com.google.firebase.auth.UserProfileChangeRequest.Builder()
+                    .setDisplayName(displayName.trim())
+                    .build()
+                user.updateProfile(profileUpdates).await()
+            }
+            saveUserProfile(user)
+            Result.success(user)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    fun isUserSignedIn(): Boolean = auth.currentUser != null && !auth.currentUser!!.isAnonymous
+
     fun signOut() {
         auth.signOut()
+    }
+
+    fun getUserPhotoUrl(): String? {
+        return auth.currentUser?.photoUrl?.toString()
+    }
+
+    suspend fun deleteAccount(): Result<Boolean> = withContext(Dispatchers.IO) {
+        val user = auth.currentUser ?: return@withContext Result.failure(Exception("No user currently signed in"))
+        try {
+            val uid = user.uid
+            // 1. Delete user profile and subcollections from Firestore
+            try {
+                firestore.collection("users").document(uid).delete().await()
+            } catch (_: Exception) {}
+
+            // 2. Delete user account from Firebase Auth
+            user.delete().await()
+            Result.success(true)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
     }
 
     // 2. FIRESTORE DATABASE OPERATIONS (ramya-ai-b22e4)
@@ -186,6 +237,77 @@ object CloudManager {
             success
         } catch (e: Exception) {
             false
+        }
+    }
+
+    suspend fun testProvider(providerKey: String): Pair<Boolean, String> = withContext(Dispatchers.IO) {
+        val start = System.currentTimeMillis()
+        when (providerKey.lowercase()) {
+            "firestore" -> {
+                val ok = checkFirestoreConnection()
+                val lat = System.currentTimeMillis() - start
+                Pair(ok, if (ok) "Connected (${lat}ms)" else "Firestore offline or rules denied")
+            }
+            "supabase" -> {
+                val ok = checkSupabaseConnection()
+                val lat = System.currentTimeMillis() - start
+                Pair(ok, if (ok) "Connected (${lat}ms)" else "Supabase gateway timeout")
+            }
+            "weather" -> {
+                try {
+                    val res = fetchLiveWeather()
+                    val lat = System.currentTimeMillis() - start
+                    Pair(true, "Online (${lat}ms) - $res")
+                } catch (e: Exception) {
+                    Pair(false, "Weather API error: ${e.message}")
+                }
+            }
+            "gemini" -> {
+                // Check connectivity to Google Gemini endpoint
+                try {
+                    val req = Request.Builder().url("https://generativelanguage.googleapis.com").head().build()
+                    val res = httpClient.newCall(req).execute()
+                    val lat = System.currentTimeMillis() - start
+                    res.close()
+                    Pair(true, "Gateway Reachable (${lat}ms)")
+                } catch (e: Exception) {
+                    Pair(false, "Unreachable: ${e.message}")
+                }
+            }
+            "openrouter", "openai" -> {
+                val key = BuildConfig.OPENROUTER_KEY
+                if (key.isBlank()) {
+                    Pair(false, "API key not configured in local.properties")
+                } else {
+                    try {
+                        val req = Request.Builder()
+                            .url("https://openrouter.ai/api/v1/auth/key")
+                            .addHeader("Authorization", "Bearer $key")
+                            .get()
+                            .build()
+                        val res = httpClient.newCall(req).execute()
+                        val lat = System.currentTimeMillis() - start
+                        val success = res.isSuccessful
+                        res.close()
+                        Pair(success, if (success) "Active (${lat}ms)" else "HTTP ${res.code}")
+                    } catch (e: Exception) {
+                        Pair(false, "Failed: ${e.message}")
+                    }
+                }
+            }
+            "ollama" -> {
+                try {
+                    val req = Request.Builder().url("http://127.0.0.1:11434/api/tags").get().build()
+                    val res = httpClient.newCall(req).execute()
+                    val lat = System.currentTimeMillis() - start
+                    val success = res.isSuccessful
+                    res.close()
+                    Pair(success, if (success) "Local Ollama Active (${lat}ms)" else "HTTP ${res.code}")
+                } catch (_: Exception) {
+                    Pair(false, "Offline (Local daemon not running on port 11434)")
+                }
+            }
+            else -> Pair(true, "Available")
         }
     }
 

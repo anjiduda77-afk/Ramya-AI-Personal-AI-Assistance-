@@ -124,7 +124,9 @@ object MusicPlaybackManager {
             val pm = context.packageManager
             if (intent.resolveActivity(pm) != null) {
                 context.startActivity(intent)
-                MusicActionResult.PlaybackInitiated(songTitle ?: fullQuery, artistName, targetLabel)
+                val resolvedTitle = songTitle ?: fullQuery
+                MusicHistoryManager.recordPlayedSong(context, resolvedTitle, artistName)
+                MusicActionResult.PlaybackInitiated(resolvedTitle, artistName, targetLabel)
             } else {
                 // Fallback to opening YouTube or browser search
                 val searchIntent = Intent(Intent.ACTION_WEB_SEARCH).apply {
@@ -132,6 +134,7 @@ object MusicPlaybackManager {
                     putExtra(SearchManager.QUERY, "play $fullQuery")
                 }
                 context.startActivity(searchIntent)
+                MusicHistoryManager.recordPlayedSong(context, songTitle ?: fullQuery, artistName)
                 MusicActionResult.SearchOpened(fullQuery, "Web Search")
             }
         } catch (e: Exception) {

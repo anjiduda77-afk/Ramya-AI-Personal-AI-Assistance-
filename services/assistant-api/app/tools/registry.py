@@ -371,3 +371,143 @@ central_registry.register(
     requires_confirmation=True,
     timeout_seconds=5.0
 )
+
+# 6. Phase 8 Native Device Actions Registry
+central_registry.register(
+    tool_id="find_contact",
+    name="Find Contact",
+    description="Query user authorized address book for contacts matching name or relationship",
+    parameters={
+        "query": {"type": "string", "required": True, "description": "Contact name or search term"}
+    },
+    handler_module="app.tools.productivity",
+    supported_platforms=["android", "windows"],
+    tier=PermissionTier.READ_ONLY,
+    timeout_seconds=4.0
+)
+
+central_registry.register(
+    tool_id="prepare_message",
+    name="Prepare Message",
+    description="Formulate and prefill a mobile message (WhatsApp/SMS) with target recipient and body",
+    parameters={
+        "recipient": {"type": "string", "required": True, "description": "Recipient name or phone number"},
+        "message": {"type": "string", "required": True, "description": "Message content"},
+        "platform": {"type": "string", "default": "whatsapp", "allowed_values": ["whatsapp", "sms"]}
+    },
+    handler_module="app.tools.productivity",
+    supported_platforms=["android"],
+    tier=PermissionTier.LOW_RISK,
+    timeout_seconds=4.0
+)
+
+central_registry.register(
+    tool_id="send_message_when_supported",
+    name="Send Message (High Risk Confirmation)",
+    description="Dispatches message when supported or opens prefilled chat with confirmation",
+    parameters={
+        "recipient": {"type": "string", "required": True, "description": "Recipient contact"},
+        "message": {"type": "string", "required": True, "description": "Message text"}
+    },
+    handler_module="app.tools.productivity",
+    supported_platforms=["android"],
+    tier=PermissionTier.HIGH_RISK,
+    requires_confirmation=True,
+    timeout_seconds=5.0
+)
+
+central_registry.register(
+    tool_id="search_music",
+    name="Search Music Tracks",
+    description="Search music catalog across Spotify, YouTube Music, or authorized providers",
+    parameters={
+        "query": {"type": "string", "required": True, "description": "Song title or artist search query"}
+    },
+    handler_module="app.tools.music_player",
+    supported_platforms=["android", "windows", "web"],
+    tier=PermissionTier.READ_ONLY,
+    timeout_seconds=5.0
+)
+
+central_registry.register(
+    tool_id="identify_song_from_lyrics",
+    name="Identify Song From Lyrics",
+    description="Multi-stage lyric fragment matcher resolving remembered phrases to song and artist",
+    parameters={
+        "lyrics": {"type": "string", "required": True, "description": "Remembered lyric fragment"}
+    },
+    handler_module="app.tools.music_player",
+    supported_platforms=["android", "windows", "web"],
+    tier=PermissionTier.READ_ONLY,
+    timeout_seconds=6.0
+)
+
+central_registry.register(
+    tool_id="identify_song_from_audio_when_supported",
+    name="Identify Song From Audio / Melody",
+    description="Audio capture and melody identification mode for hummed or recorded music",
+    parameters={
+        "sample_duration": {"type": "number", "default": 5.0, "description": "Audio sample duration in seconds"}
+    },
+    handler_module="app.tools.music_player",
+    supported_platforms=["android"],
+    tier=PermissionTier.READ_ONLY,
+    timeout_seconds=8.0
+)
+
+central_registry.register(
+    tool_id="control_playback",
+    name="Control Media Playback",
+    description="Native media session playback control (pause, resume, next, previous, stop, volume)",
+    parameters={
+        "action": {
+            "type": "string",
+            "required": True,
+            "allowed_values": ["pause", "resume", "next", "previous", "stop", "volume_up", "volume_down"],
+            "description": "Playback control action"
+        }
+    },
+    handler_module="app.tools.music_player",
+    supported_platforms=["android", "windows"],
+    tier=PermissionTier.LOW_RISK,
+    timeout_seconds=3.0
+)
+
+central_registry.register(
+    tool_id="answer_question",
+    name="Answer General Question",
+    description="General knowledge, calculations, translations, and conversational explanation",
+    parameters={
+        "question": {"type": "string", "required": True, "description": "User question"}
+    },
+    handler_module="app.providers.router",
+    supported_platforms=["android", "windows", "web"],
+    tier=PermissionTier.READ_ONLY,
+    timeout_seconds=10.0
+)
+
+central_registry.register(
+    tool_id="retrieve_conversation_context",
+    name="Retrieve Conversation Context",
+    description="Retrieve multi-turn dialogue context, last mentioned contacts, songs, and preferences",
+    parameters={},
+    handler_module="app.intelligence.context_engine",
+    supported_platforms=["android", "windows", "web"],
+    tier=PermissionTier.READ_ONLY,
+    timeout_seconds=2.0
+)
+
+central_registry.register(
+    tool_id="manage_user_preferences",
+    name="Manage User Preferences",
+    description="Update or inspect persistent preferences (preferred music app, wake-word sensitivity)",
+    parameters={
+        "key": {"type": "string", "required": True, "description": "Preference key"},
+        "value": {"type": "string", "required": True, "description": "Preference value"}
+    },
+    handler_module="app.memory.engine",
+    supported_platforms=["android", "windows", "web"],
+    tier=PermissionTier.MEDIUM_RISK,
+    timeout_seconds=3.0
+)
+

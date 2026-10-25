@@ -3,6 +3,7 @@ package ai.ramya.assistant.orchestrator
 import android.content.Context
 import ai.ramya.assistant.data.CloudManager
 import ai.ramya.assistant.data.ConversationContextManager
+import ai.ramya.assistant.data.DocumentRagManager
 import ai.ramya.assistant.data.PendingConfirmation
 import ai.ramya.assistant.intents.*
 import ai.ramya.assistant.metrics.MetricLogger
@@ -16,7 +17,8 @@ data class OrchestratorResponse(
 
 /**
  * Master Native Intent and Conversation Orchestrator for Ramya AI.
- * Dispatches voice and text inputs across App Launcher, Music Controls, Safe Calling,
+ * Dispatches voice and text inputs across App Launcher, WhatsApp Messaging,
+ * Music Controls & Lyric Identification, Safe Calling,
  * Multi-Turn Pronoun Resolution, and Cloud AI Reasoning.
  */
 object AssistantOrchestrator {
@@ -28,13 +30,13 @@ object AssistantOrchestrator {
 
         if (cleanQuery.isBlank()) {
             return OrchestratorResponse(
-                displayText = "I'm listening! You can ask me to open apps, play songs, call contacts, or answer questions.",
+                displayText = "I'm listening! You can ask me to send WhatsApp messages, play music, call contacts, or answer questions.",
                 spokenText = "I am listening! How can I help you?",
                 actionTag = "PROMPT"
             )
         }
 
-        // 1. Explicit Termination Handling ("Goodbye", "Stop listening", "Sleep")
+        // 1. Explicit Termination Handling ("Goodbye", "Stop listening", "Sleep", "Go to sleep")
         if (ConversationContextManager.isTerminationCommand(cleanQuery)) {
             ConversationContextManager.endSession()
             MetricLogger.logToolExecution(context, "Termination", true, System.currentTimeMillis() - startTime)
@@ -59,36 +61,39 @@ object AssistantOrchestrator {
             )
         }
 
-        // 3. Pending Confirmation Handling (Play Store, Call Confirmation)
+        // 3. Pending Confirmation Handling (WhatsApp, Call, Play Store, Song Playback)
         val pending = ConversationContextManager.pendingConfirmation
         if (pending != null) {
             if (ConversationContextManager.isConfirmation(cleanQuery)) {
                 ConversationContextManager.clearPendingConfirmation()
                 when (pending) {
-                    is PendingConfirmation.PlayStoreInstall -> {
-                        val result = AppLauncherManager.openPlayStore(context, pending.appName, pending.packageName)
-                        MetricLogger.logToolExecution(context, "PlayStore", true, System.currentTimeMillis() - startTime)
+                    is PendingConfirmation.WhatsAppMessage -> {
+                        val result = WhatsAppManager.executeWhatsAppDispatch(context, pending.contact, pending.messageText)
+                        MetricLogger.logToolExecution(context, "WhatsAppConfirm", true, System.currentTimeMillis() - startTime)
                         return when (result) {
-                            is AppResolutionResult.PlayStoreOpened -> OrchestratorResponse(
-                                displayText = "Opening Google Play Store for ${pending.appName}...",
-                                spokenText = "Opening Google Play Store for ${pending.appName}.",
-                                actionTag = "PLAY_STORE"
-                            )
-                            is AppResolutionResult.Error -> OrchestratorResponse(
+                            is MessageActionResult.WhatsAppConversationOpened -> {
+                                ConversationContextManager.setLastMessage(pending.contact, pending.messageText)
+                                OrchestratorResponse(
+                                    displayText = "Opening WhatsApp with ${pending.contact.name} (${pending.contact.number})\nMessage: \"${pending.messageText}\"\n\nPlease tap Send in WhatsApp to deliver.",
+                                    spokenText = "Opening WhatsApp for ${pending.contact.name}. Please tap Send.",
+                                    actionTag = "WHATSAPP_OPENED"
+                                )
+                            }
+                            is MessageActionResult.Error -> OrchestratorResponse(
                                 displayText = result.message,
                                 spokenText = result.message,
                                 actionTag = "ERROR"
                             )
                             else -> OrchestratorResponse(
-                                displayText = "Opening Play Store...",
-                                spokenText = "Opening Play Store.",
-                                actionTag = "PLAY_STORE"
+                                displayText = "Opening WhatsApp...",
+                                spokenText = "Opening WhatsApp.",
+                                actionTag = "WHATSAPP_OPENED"
                             )
                         }
                     }
                     is PendingConfirmation.PhoneCall -> {
                         val result = ContactCallManager.executeCall(context, pending.contact, isConfirmed = true)
-                        MetricLogger.logToolExecution(context, "Call", true, System.currentTimeMillis() - startTime)
+                        MetricLogger.logToolExecution(context, "CallConfirm", true, System.currentTimeMillis() - startTime)
                         return when (result) {
                             is ContactResolutionResult.DirectCallInitiated -> OrchestratorResponse(
                                 displayText = "Calling ${pending.contact.name} (${pending.contact.number})...",
@@ -112,6 +117,34 @@ object AssistantOrchestrator {
                             )
                         }
                     }
+                    is PendingConfirmation.PlayStoreInstall -> {
+                        val result = AppLauncherManager.openPlayStore(context, pending.appName, pending.packageName)
+                        MetricLogger.logToolExecution(context, "PlayStore", true, System.currentTimeMillis() - startTime)
+                        return when (result) {
+                            is AppResolutionResult.PlayStoreOpened -> OrchestratorResponse(
+                                displayText = "Opening Google Play Store for ${pending.appName}...",
+                                spokenText = "Opening Google Play Store for ${pending.appName}.",
+                                actionTag = "PLAY_STORE"
+                            )
+                            is AppResolutionResult.Error -> OrchestratorResponse(
+                                displayText = result.message,
+                                spokenText = result.message,
+                                actionTag = "ERROR"
+                            )
+                            else -> OrchestratorResponse(
+                                displayText = "Opening Play Store...",
+                                spokenText = "Opening Play Store.",
+                                actionTag = "PLAY_STORE"
+                            )
+                        }
+                    }
+                    is PendingConfirmation.PlayIdentifiedSong -> {
+                        val musicResult = MusicPlaybackManager.playMusic(context, pending.songTitle, pending.artistName)
+                        MetricLogger.logToolExecution(context, "SongConfirm", true, System.currentTimeMillis() - startTime)
+                        ConversationContextManager.setLastSong(pending.songTitle, pending.artistName)
+                        val msg = "Playing '${pending.songTitle}' on music player."
+                        return OrchestratorResponse(msg, msg, actionTag = "MUSIC")
+                    }
                     else -> {}
                 }
             } else if (ConversationContextManager.isRejection(cleanQuery)) {
@@ -125,43 +158,212 @@ object AssistantOrchestrator {
             }
         }
 
-        // 4. Resolve Pronouns ("Open it", "Call him", "Play that song")
+        // 4. Resolve Context & Pronouns ("Open it", "Call him", "Play that song", "Send the same message to...")
         val resolvedQuery = ConversationContextManager.resolvePronouns(cleanQuery)
         val lower = resolvedQuery.lowercase()
 
-        // 5. Media Controls Intent (Pause, Resume, Next, Prev, Stop, Volume)
+        // 5. Read Stored / Prepared Message Aloud
+        if (lower in setOf("read the message aloud", "read message aloud", "read my message", "read message")) {
+            val lastMsg = ConversationContextManager.lastMessageText
+            val recipient = ConversationContextManager.lastRecipient?.name ?: "your contact"
+            return if (!lastMsg.isNullOrBlank()) {
+                val readSpoken = "Your message for $recipient is: \"$lastMsg\"."
+                OrchestratorResponse(
+                    displayText = "Prepared Message for $recipient:\n\"$lastMsg\"",
+                    spokenText = readSpoken,
+                    actionTag = "READ_MESSAGE"
+                )
+            } else {
+                OrchestratorResponse(
+                    displayText = "No recent message text found in this session.",
+                    spokenText = "You haven't prepared any message yet.",
+                    actionTag = "READ_MESSAGE"
+                )
+            }
+        }
+
+        // 6. WhatsApp & Mobile Messaging Intent
+        val (parsedRecipient, parsedMsg, hasMsgPattern) = WhatsAppManager.parseMessageQuery(resolvedQuery)
+        if (hasMsgPattern || parsedRecipient != null) {
+            val recipient = parsedRecipient ?: ConversationContextManager.lastRecipient?.name ?: ""
+            val messageBody = parsedMsg ?: ConversationContextManager.lastMessageText ?: ""
+
+            if (recipient.isBlank()) {
+                return OrchestratorResponse(
+                    displayText = "Who would you like me to send a WhatsApp message to?",
+                    spokenText = "Who would you like to send this WhatsApp message to?",
+                    actionTag = "MESSAGE_PROMPT"
+                )
+            }
+            if (messageBody.isBlank()) {
+                return OrchestratorResponse(
+                    displayText = "What message would you like to send to $recipient?",
+                    spokenText = "What message would you like to send to $recipient?",
+                    actionTag = "MESSAGE_PROMPT"
+                )
+            }
+
+            val prepResult = WhatsAppManager.prepareMessage(context, recipient, messageBody, bypassConfirmation = false)
+            MetricLogger.logToolExecution(context, "WhatsAppPrepare", true, System.currentTimeMillis() - startTime)
+
+            return when (prepResult) {
+                is MessageActionResult.ConfirmationRequired -> {
+                    ConversationContextManager.setPendingConfirmation(
+                        PendingConfirmation.WhatsAppMessage(prepResult.contact, prepResult.messageText)
+                    )
+                    val confirmDisplay = "Ready to send WhatsApp message to ${prepResult.contact.name} (${prepResult.contact.number}):\n\n\"${prepResult.messageText}\"\n\nSay 'Yes' or 'Send' to proceed, or 'Cancel'."
+                    val confirmSpoken = "I prepared your WhatsApp message for ${prepResult.contact.name}: \"${prepResult.messageText}\". Shall I open WhatsApp?"
+                    OrchestratorResponse(confirmDisplay, confirmSpoken, actionTag = "WHATSAPP_CONFIRM")
+                }
+                is MessageActionResult.NeedsDisambiguation -> {
+                    val names = prepResult.matches.joinToString(", ") { "${it.name} (${it.number})" }
+                    OrchestratorResponse(
+                        displayText = "I found multiple contacts matching '${prepResult.query}':\n$names\n\nWhich contact would you like to message?",
+                        spokenText = "I found multiple contacts for ${prepResult.query}. Which one would you like to message?",
+                        actionTag = "WHATSAPP_DISAMBIGUATION"
+                    )
+                }
+                is MessageActionResult.ContactNotFound -> {
+                    OrchestratorResponse(
+                        displayText = "I couldn't find '${prepResult.query}' in your contacts. You can say their phone number directly.",
+                        spokenText = "I couldn't find ${prepResult.query} in your contacts.",
+                        actionTag = "CONTACT_NOT_FOUND"
+                    )
+                }
+                is MessageActionResult.AppNotInstalled -> {
+                    ConversationContextManager.setPendingConfirmation(
+                        PendingConfirmation.PlayStoreInstall("WhatsApp", WhatsAppManager.WHATSAPP_PACKAGE)
+                    )
+                    OrchestratorResponse(
+                        displayText = "WhatsApp is not installed on this device. Would you like me to open its Google Play Store page so you can install it?",
+                        spokenText = "WhatsApp is not installed on this device. Would you like to open Google Play Store?",
+                        actionTag = "PLAY_STORE_PROMPT"
+                    )
+                }
+                is MessageActionResult.PermissionRequired -> {
+                    OrchestratorResponse(
+                        displayText = prepResult.message,
+                        spokenText = prepResult.message,
+                        actionTag = "PERMISSION_REQUIRED"
+                    )
+                }
+                is MessageActionResult.NeedsDetails -> {
+                    OrchestratorResponse(
+                        displayText = prepResult.prompt,
+                        spokenText = prepResult.prompt,
+                        actionTag = "MESSAGE_PROMPT"
+                    )
+                }
+                is MessageActionResult.Error -> {
+                    OrchestratorResponse(prepResult.message, prepResult.message, actionTag = "ERROR")
+                }
+                else -> OrchestratorResponse("Processing message...", "Processing message.", actionTag = "MESSAGE")
+            }
+        }
+
+        // 7. Advanced Music Identification: Lyrics Search & Humming Mode
+        val lyricsRegex = Regex("^(?:find|search|what\\s+is)\\s+(?:the\\s+)?song\\s+(?:with\\s+)?(?:the\\s+)?lyrics\\s*(?:i\\s+remember)?[:\\s]*(.+)$", RegexOption.IGNORE_CASE)
+        val lyricsMatch = lyricsRegex.find(lower)
+        if (lyricsMatch != null) {
+            val lyricsQuery = lyricsMatch.groupValues[1].trim()
+            val matches = MusicHistoryManager.identifySongFromLyrics(lyricsQuery)
+            if (matches.isNotEmpty()) {
+                val best = matches.first()
+                ConversationContextManager.setPendingConfirmation(
+                    PendingConfirmation.PlayIdentifiedSong(best.songTitle, best.artistName)
+                )
+                ConversationContextManager.setLastIdentifiedLyricsSong(best.songTitle)
+                val replyDisplay = "Identified Song from lyrics:\n🎵 **${best.songTitle}** by ${best.artistName}\nConfidence: ${(best.confidence * 100).toInt()}%\n\nWould you like me to play it?"
+                val replySpoken = "I found the song '${best.songTitle}' by ${best.artistName}. Would you like me to play it?"
+                return OrchestratorResponse(replyDisplay, replySpoken, actionTag = "LYRICS_IDENTIFIED")
+            } else {
+                return OrchestratorResponse(
+                    displayText = "I couldn't identify a song from those exact lyrics offline. Could you give me another line or the singer's name?",
+                    spokenText = "I couldn't match those lyrics. Could you tell me a few more words or the singer's name?",
+                    actionTag = "LYRICS_NOT_FOUND"
+                )
+            }
+        }
+
+        // Humming / Melody Recognition Intent
+        if (lower.contains("remember its tune") || lower.contains("forgot the song name") || lower.contains("hum the song") || lower == "identify tune") {
+            return OrchestratorResponse(
+                displayText = "🎵 Melody Mode Activated:\nTap the microphone and hum or whistle the tune for 5 seconds.\n\nNote: Offline melody recognition confidence is conservative. If match is uncertain, you can also speak a lyric clue or artist name.",
+                spokenText = "Melody capture ready. Please hum the tune, or tell me a lyric clue to help find it.",
+                actionTag = "MELODY_CAPTURE"
+            )
+        }
+
+        // 8. Playback History ("Play that song again", "Play the song I was listening to yesterday")
+        if (lower in setOf("play that song again", "play that song", "play again", "replay song", "repeat song")) {
+            val lastPlayed = MusicHistoryManager.getLastPlayedSong(context)
+            if (lastPlayed != null) {
+                val res = MusicPlaybackManager.playMusic(context, lastPlayed.songTitle, lastPlayed.artistName)
+                ConversationContextManager.setLastSong(lastPlayed.songTitle, lastPlayed.artistName)
+                val msg = "Playing '${lastPlayed.songTitle}' again."
+                return OrchestratorResponse(msg, msg, actionTag = "MUSIC")
+            }
+        }
+
+        if (lower.contains("listening to yesterday") || lower.contains("song from yesterday") || lower == "play yesterday's song") {
+            val yesterdaySong = MusicHistoryManager.getYesterdaySong(context)
+            if (yesterdaySong != null) {
+                val res = MusicPlaybackManager.playMusic(context, yesterdaySong.songTitle, yesterdaySong.artistName)
+                ConversationContextManager.setLastSong(yesterdaySong.songTitle, yesterdaySong.artistName)
+                val msg = "Playing '${yesterdaySong.songTitle}' from your recent history."
+                return OrchestratorResponse(msg, msg, actionTag = "MUSIC")
+            } else {
+                return OrchestratorResponse(
+                    displayText = "No playback history recorded from yesterday yet. Which song would you like to hear today?",
+                    spokenText = "I don't see a song recorded from yesterday. What would you like to play?",
+                    actionTag = "MUSIC_PROMPT"
+                )
+            }
+        }
+
+        // 9. Media Controls Intent (Pause, Resume, Next, Prev, Stop, Volume)
         if (lower in setOf("pause", "pause music", "pause song", "stop music", "stop song")) {
-            val res = MusicPlaybackManager.pausePlayback(context)
+            MusicPlaybackManager.pausePlayback(context)
             MetricLogger.logToolExecution(context, "MediaControl", true, System.currentTimeMillis() - startTime)
             return OrchestratorResponse("Media playback paused.", "Paused.", actionTag = "MEDIA")
         }
         if (lower in setOf("resume", "resume music", "continue music", "play music again")) {
-            val res = MusicPlaybackManager.resumePlayback(context)
+            MusicPlaybackManager.resumePlayback(context)
             MetricLogger.logToolExecution(context, "MediaControl", true, System.currentTimeMillis() - startTime)
             return OrchestratorResponse("Resuming media playback.", "Resuming.", actionTag = "MEDIA")
         }
         if (lower in setOf("next song", "next track", "skip song", "skip track")) {
-            val res = MusicPlaybackManager.nextTrack(context)
+            MusicPlaybackManager.nextTrack(context)
             MetricLogger.logToolExecution(context, "MediaControl", true, System.currentTimeMillis() - startTime)
             return OrchestratorResponse("Skipping to next track.", "Next track.", actionTag = "MEDIA")
         }
         if (lower in setOf("previous song", "previous track", "last track")) {
-            val res = MusicPlaybackManager.previousTrack(context)
+            MusicPlaybackManager.previousTrack(context)
             MetricLogger.logToolExecution(context, "MediaControl", true, System.currentTimeMillis() - startTime)
             return OrchestratorResponse("Playing previous track.", "Previous track.", actionTag = "MEDIA")
         }
         if (lower in setOf("volume up", "increase volume", "louder")) {
-            val res = MusicPlaybackManager.adjustVolume(context, increase = true)
+            MusicPlaybackManager.adjustVolume(context, increase = true)
             MetricLogger.logToolExecution(context, "Volume", true, System.currentTimeMillis() - startTime)
             return OrchestratorResponse("Volume increased.", "Volume increased.", actionTag = "VOLUME")
         }
         if (lower in setOf("volume down", "decrease volume", "lower volume", "softer")) {
-            val res = MusicPlaybackManager.adjustVolume(context, increase = false)
+            MusicPlaybackManager.adjustVolume(context, increase = false)
             MetricLogger.logToolExecution(context, "Volume", true, System.currentTimeMillis() - startTime)
             return OrchestratorResponse("Volume decreased.", "Volume decreased.", actionTag = "VOLUME")
         }
 
-        // 6. Music Playback Intent ("Play [song]", "Play [song] by [artist]")
+        // 10. Music Playback Intent ("Play [song]", "Play [song] by [artist]", "Play songs by [singer]")
+        val playBySingerRegex = Regex("^play\\s+songs?\\s+by\\s+(.+)$", RegexOption.IGNORE_CASE)
+        val playSingerMatch = playBySingerRegex.find(lower)
+        if (playSingerMatch != null) {
+            val singerName = playSingerMatch.groupValues[1].trim()
+            ConversationContextManager.setLastSong("Songs by $singerName", singerName)
+            val res = MusicPlaybackManager.playMusic(context, null, singerName)
+            val msg = "Playing songs by $singerName."
+            return OrchestratorResponse(msg, msg, actionTag = "MUSIC")
+        }
+
         val playRegex = Regex("^(?:play|play me|stream|listen to)\\s+(.+)$", RegexOption.IGNORE_CASE)
         val playMatch = playRegex.find(lower)
         if (playMatch != null) {
@@ -210,7 +412,7 @@ object AssistantOrchestrator {
             }
         }
 
-        // 7. App Launcher Intent ("Open [App]", "Launch [App]")
+        // 11. App Launcher Intent ("Open [App]", "Launch [App]")
         val openAppRegex = Regex("^(?:open|launch|start|run)\\s+(.+)$", RegexOption.IGNORE_CASE)
         val openAppMatch = openAppRegex.find(lower)
         if (openAppMatch != null) {
@@ -246,7 +448,7 @@ object AssistantOrchestrator {
             }
         }
 
-        // 8. Calling Intent ("Call [Name]", "Dial [Number]")
+        // 12. Calling Intent ("Call [Name]", "Dial [Number]")
         val callRegex = Regex("^(?:call|dial|ring|phone)\\s+(.+)$", RegexOption.IGNORE_CASE)
         val callMatch = callRegex.find(lower)
         if (callMatch != null) {
@@ -298,15 +500,34 @@ object AssistantOrchestrator {
             }
         }
 
-        // 9. Cloud AI Reasoning (OpenAI / DeepSeek / Live Weather / Translation)
-        val cloudReply = CloudManager.askRamya(cleanQuery)
+        // 13. Cloud AI Reasoning & Document RAG Knowledge Base
+        val ragResult = DocumentRagManager.searchKnowledgeBase(context, cleanQuery)
+        val promptToUse = if (ragResult.contextPrompt != null) {
+            "${ragResult.contextPrompt}\n\nQuestion: $cleanQuery"
+        } else {
+            cleanQuery
+        }
+
+        val cloudReply = CloudManager.askRamya(promptToUse)
         val latencyMs = System.currentTimeMillis() - startTime
-        MetricLogger.logToolExecution(context, "CloudReasoning", true, latencyMs)
+        MetricLogger.logToolExecution(
+            context,
+            if (ragResult.contextPrompt != null) "RagReasoning" else "CloudReasoning",
+            true,
+            latencyMs
+        )
+
+        val displayTextWithCitations = if (ragResult.citations.isNotEmpty()) {
+            val citationFooter = "\n\n📚 Sources:\n" + ragResult.citations.joinToString("\n") { citation -> "• $citation" }
+            "$cloudReply$citationFooter"
+        } else {
+            cloudReply
+        }
 
         return OrchestratorResponse(
-            displayText = cloudReply,
+            displayText = displayTextWithCitations,
             spokenText = cloudReply,
-            actionTag = "CLOUD_AI"
+            actionTag = if (ragResult.citations.isNotEmpty()) "DOCUMENT_RAG" else "CLOUD_AI"
         )
     }
 }

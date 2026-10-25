@@ -58,7 +58,19 @@ class PermissionManager:
             "delete_all_data": PermissionTier.HIGH_RISK,
             "initiate_phone_call": PermissionTier.HIGH_RISK,
             "send_message": PermissionTier.HIGH_RISK,
-            "execute_system_command": PermissionTier.HIGH_RISK
+            "send_message_when_supported": PermissionTier.HIGH_RISK,
+            "execute_system_command": PermissionTier.HIGH_RISK,
+
+            # Phase 8 Structured Device Action Tools
+            "find_contact": PermissionTier.READ_ONLY,
+            "prepare_message": PermissionTier.LOW_RISK,
+            "search_music": PermissionTier.READ_ONLY,
+            "identify_song_from_lyrics": PermissionTier.READ_ONLY,
+            "identify_song_from_audio_when_supported": PermissionTier.READ_ONLY,
+            "control_playback": PermissionTier.LOW_RISK,
+            "answer_question": PermissionTier.READ_ONLY,
+            "retrieve_conversation_context": PermissionTier.READ_ONLY,
+            "manage_user_preferences": PermissionTier.MEDIUM_RISK
         }
 
     def get_tier(self, tool_name: str) -> PermissionTier:

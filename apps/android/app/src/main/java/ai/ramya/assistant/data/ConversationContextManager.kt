@@ -10,13 +10,16 @@ sealed class PendingConfirmation {
     data class PhoneCall(val contact: ContactInfo) : PendingConfirmation()
     data class AppDisambiguation(val matches: List<Pair<String, String>>) : PendingConfirmation()
     data class MusicDisambiguation(val query: String) : PendingConfirmation()
+    data class WhatsAppMessage(val contact: ContactInfo, val messageText: String, val appName: String = "WhatsApp") : PendingConfirmation()
+    data class PlayIdentifiedSong(val songTitle: String, val artistName: String?) : PendingConfirmation()
+    data class DisambiguateWhatsAppRecipient(val matches: List<ContactInfo>, val messageText: String) : PendingConfirmation()
 }
 
 /**
  * Multi-turn Conversational Context and Memory Manager.
- * Preserves session state across turns, resolves pronouns ("Open it", "Call him", "Play that song"),
+ * Preserves session state across turns, resolves pronouns ("Open it", "Call him", "Play that song", "Send the same message to..."),
  * maintains conversation continuity across polite fillers ("thanks", "okay", "hmm"),
- * and cleanly handles explicit termination ("Goodbye", "Stop listening").
+ * and cleanly handles explicit termination ("Goodbye", "Stop listening", "Sleep").
  */
 object ConversationContextManager {
 
@@ -36,6 +39,15 @@ object ConversationContextManager {
         private set
 
     var lastMentionedArtist: String? = null
+        private set
+
+    var lastMessageText: String? = null
+        private set
+
+    var lastRecipient: ContactInfo? = null
+        private set
+
+    var lastIdentifiedLyricsSong: String? = null
         private set
 
     var lastIntentType: String? = null
@@ -100,11 +112,11 @@ object ConversationContextManager {
     }
 
     /**
-     * Checks if the user is confirming a pending action (e.g. "yes", "sure", "proceed", "call").
+     * Checks if the user is confirming a pending action (e.g. "yes", "sure", "proceed", "call", "send").
      */
     fun isConfirmation(utterance: String): Boolean {
         val clean = utterance.trim().lowercase().removeSuffix(".").removeSuffix("!")
-        return clean in setOf("yes", "yeah", "yep", "sure", "go ahead", "do it", "please", "confirm", "open it", "call", "install")
+        return clean in setOf("yes", "yeah", "yep", "sure", "go ahead", "do it", "please", "confirm", "open it", "call", "send", "send it", "install", "play it")
     }
 
     /**
@@ -125,13 +137,25 @@ object ConversationContextManager {
 
     fun setLastContact(contact: ContactInfo) {
         lastMentionedContact = contact
+        lastRecipient = contact
         lastIntentType = "CALL"
+    }
+
+    fun setLastMessage(contact: ContactInfo, text: String) {
+        lastRecipient = contact
+        lastMentionedContact = contact
+        lastMessageText = text
+        lastIntentType = "WHATSAPP"
     }
 
     fun setLastSong(song: String, artist: String?) {
         lastMentionedSong = song
         lastMentionedArtist = artist
         lastIntentType = "MUSIC"
+    }
+
+    fun setLastIdentifiedLyricsSong(songTitle: String) {
+        lastIdentifiedLyricsSong = songTitle
     }
 
     fun setPendingConfirmation(confirmation: PendingConfirmation?) {
@@ -147,6 +171,8 @@ object ConversationContextManager {
      * - "Open it" -> "open [lastApp]"
      * - "Play that song" / "Play it" -> "play [lastSong]"
      * - "Call him" / "Call her" / "Call them" -> "call [lastContact.name]"
+     * - "Send him a message saying [X]" -> "send WhatsApp to [lastContact.name] saying [X]"
+     * - "Send the same message to [Name]" -> "send WhatsApp to [Name] saying [lastMessageText]"
      */
     fun resolvePronouns(utterance: String): String {
         val clean = utterance.trim()
@@ -162,9 +188,33 @@ object ConversationContextManager {
             return "call ${lastMentionedContact?.name}"
         }
 
-        // "play that song" / "play it" -> play last song
+        // "play that song" / "play it" / "play that" -> play last song
         if ((lower == "play that song" || lower == "play it" || lower == "play that") && !lastMentionedSong.isNullOrBlank()) {
             return "play $lastMentionedSong"
+        }
+
+        // "send the same message to [Name]" -> resolve lastMessageText
+        val sameMsgRegex = Regex("^send\\s+(?:the\\s+)?same\\s+message\\s+to\\s+(.+)$", RegexOption.IGNORE_CASE)
+        val sameMsgMatch = sameMsgRegex.find(clean)
+        if (sameMsgMatch != null && !lastMessageText.isNullOrBlank()) {
+            val recipient = sameMsgMatch.groupValues[1].trim()
+            return "send $recipient a WhatsApp message saying $lastMessageText"
+        }
+
+        // "send him/her a message saying [X]" -> resolve recipient
+        val sendHimRegex = Regex("^send\\s+(?:him|her|them)\\s+a\\s+(?:whatsapp\\s+)?message\\s+saying\\s+(.+)$", RegexOption.IGNORE_CASE)
+        val sendHimMatch = sendHimRegex.find(clean)
+        if (sendHimMatch != null && lastRecipient != null) {
+            val text = sendHimMatch.groupValues[1].trim()
+            return "send ${lastRecipient?.name} a WhatsApp message saying $text"
+        }
+
+        // "reply saying [X]" -> resolve recipient
+        val replyRegex = Regex("^(?:reply|respond)\\s+(?:to\\s+this\\s+message\\s+)?saying\\s+(.+)$", RegexOption.IGNORE_CASE)
+        val replyMatch = replyRegex.find(clean)
+        if (replyMatch != null && lastRecipient != null) {
+            val text = replyMatch.groupValues[1].trim()
+            return "send ${lastRecipient?.name} a WhatsApp message saying $text"
         }
 
         return clean
