@@ -5,7 +5,7 @@ import socket
 from pathlib import Path
 
 PORT = 8888
-APK_PATH = Path("c:/mern stack/mernpro/ramya/releases/ramya-ai-v1.0.0.apk")
+APK_PATH = Path("c:/mern stack/mernpro/ramya/releases/ramya-ai-v1.0.1.apk")
 
 def get_ip():
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -20,19 +20,15 @@ def get_ip():
 
 class ApkDownloadHandler(http.server.BaseHTTPRequestHandler):
     def do_HEAD(self):
-        if self.path in ["/download", "/ramya-ai.apk", "/ramya-ai-v1.0.0.apk", "/app-debug.apk"]:
+        if self.path in ["/download", "/ramya-ai.apk", "/ramya-ai-v1.0.1.apk", "/ramya-ai-v1.0.0.apk", "/app-debug.apk"]:
             if not APK_PATH.exists():
                 self.send_error(404, "APK not found on host machine.")
                 return
             size = APK_PATH.stat().st_size
             self.send_response(200)
             self.send_header("Content-Type", "application/vnd.android.package-archive")
-            self.send_header("Content-Disposition", 'attachment; filename="RamyaAI-Assistant-v1.0.0.apk"')
+            self.send_header("Content-Disposition", 'attachment; filename="RamyaAI-Assistant-v1.0.1.apk"')
             self.send_header("Content-Length", str(size))
-            self.end_headers()
-        else:
-            self.send_response(200)
-            self.send_header("Content-Type", "text/html; charset=utf-8")
             self.end_headers()
         else:
             self.send_response(200)
@@ -40,7 +36,7 @@ class ApkDownloadHandler(http.server.BaseHTTPRequestHandler):
             self.end_headers()
 
     def do_GET(self):
-        if self.path in ["/download", "/ramya-ai.apk", "/ramya-ai-v1.0.0.apk", "/app-debug.apk"]:
+        if self.path in ["/download", "/ramya-ai.apk", "/ramya-ai-v1.0.1.apk", "/ramya-ai-v1.0.0.apk", "/app-debug.apk"]:
             if not APK_PATH.exists():
                 self.send_error(404, "APK not found on host machine.")
                 return
@@ -48,7 +44,7 @@ class ApkDownloadHandler(http.server.BaseHTTPRequestHandler):
             size = APK_PATH.stat().st_size
             self.send_response(200)
             self.send_header("Content-Type", "application/vnd.android.package-archive")
-            self.send_header("Content-Disposition", 'attachment; filename="RamyaAI-Assistant-v1.0.0.apk"')
+            self.send_header("Content-Disposition", 'attachment; filename="RamyaAI-Assistant-v1.0.1.apk"')
             self.send_header("Content-Length", str(size))
             self.end_headers()
             
@@ -183,11 +179,11 @@ class ApkDownloadHandler(http.server.BaseHTTPRequestHandler):
         </div>
 
         <div style="display: flex; flex-direction: column; gap: 12px; margin-bottom: 24px;">
-            <a href="/ramya-ai-v1.0.0.apk" class="btn" style="margin-bottom: 0;">📱 Download Android APK (v1.0.0)</a>
+            <a href="/ramya-ai-v1.0.1.apk" class="btn" style="margin-bottom: 0;">📱 Download Android APK (v1.0.1)</a>
         </div>
 
         <div style="margin: 16px 0; background: #ffffff; padding: 14px; border-radius: 18px; display: inline-block;">
-            <img src="https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=http://{ip}:{PORT}/ramya-ai-v1.0.0.apk" alt="Scan with Phone Camera" width="180" height="180" style="display:block; border-radius: 8px;">
+            <img src="https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=http://{ip}:{PORT}/ramya-ai-v1.0.1.apk" alt="Scan with Phone Camera" width="180" height="180" style="display:block; border-radius: 8px;">
         </div>
         <p style="font-size: 13px; color: #38bdf8; font-weight: 600; margin-bottom: 16px;">
             📱 Scan with phone camera to download Android APK instantly

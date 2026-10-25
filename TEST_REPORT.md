@@ -46,7 +46,8 @@ The following 15 master scenarios defined in Section 13 of the specification wer
 
 ## 3. Verified Build Artifact
 
-- **Output APK Path:** `releases/ramya-ai-v1.0.0.apk`
-- **Output Size:** `14,175,010 bytes` (14.1 MB)
-- **SHA-256 Checksum:** `F8626FB8363F6E183C758C9D7E2625F402B5EADEE2889CB87DB4B444B70C3432`
-- **Public Direct Download:** `public/ramya-ai-v1.0.0.apk` (and live local download server on port 8888)
+- **Output APK Path:** `releases/ramya-ai-v1.0.1.apk`
+- **Output Size:** `14,710,340 bytes` (14.7 MB)
+- **SHA-256 Checksum:** `FBA3A73FFC8B9E16278EE8C51C81E859357DDBF93EBD548E3B3D66913509E57F`
+- **GitHub Release Link:** `https://github.com/anjiduda77-afk/Ramya-AI-Personal-AI-Assistance-/releases/tag/v1.0.1`
+- **Direct GitHub Raw Download:** `https://github.com/anjiduda77-afk/Ramya-AI-Personal-AI-Assistance-/raw/main/releases/ramya-ai-v1.0.1.apk`

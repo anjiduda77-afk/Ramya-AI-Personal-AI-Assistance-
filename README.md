@@ -10,27 +10,24 @@
 
 ---
 
-## 📥 Android Mobile App Download (Version 1.0.0)
+## 📥 Android Mobile App Download (Version 1.0.1)
 
 | Package Format | Version | Status | Package Name | Direct APK Download Link | Features Included |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **Android APK** | **v1.0.0** | 🟢 **Stable Release** | `ai.ramya.assistant` | [⬇️ Download ramya-ai-v1.0.0.apk (Direct)](https://github.com/anjiduda77-afk/Ramya-AI-Personal-AI-Assistance-/raw/main/releases/ramya-ai-v1.0.0.apk) | 🎙️ Real Mic Input, 🔊 TTS Mouth Voice Output, ⚡ OpenAI & DeepSeek Reasoning, ☁️ Firebase & Supabase Sync |
+| **Android APK** | **v1.0.1** | 🟢 **Stable Release** | `ai.ramya.assistant` | [⬇️ Download ramya-ai-v1.0.1.apk (Direct)](https://github.com/anjiduda77-afk/Ramya-AI-Personal-AI-Assistance-/raw/main/releases/ramya-ai-v1.0.1.apk) | 🎙️ "Hey Ramya" Wake Engine, 🔊 TTS Mouth Output, 💬 WhatsApp Click-to-Chat, 🎵 Music & Lyrics ID, 🔮 7-State Animated Orb, ☁️ Firebase Auth & Firestore |
 
 ### 📲 How to Install the APK on Your Android Phone:
 
 #### Method 1: Direct GitHub One-Tap Download (Works Worldwide — Recommended)
 Tap this link from your phone's browser (Chrome / Samsung Internet):
-👉 **[Download ramya-ai-v1.0.0.apk Directly from GitHub](https://github.com/anjiduda77-afk/Ramya-AI-Personal-AI-Assistance-/raw/main/releases/ramya-ai-v1.0.0.apk)**
+👉 **[Download ramya-ai-v1.0.1.apk Directly from GitHub](https://github.com/anjiduda77-afk/Ramya-AI-Personal-AI-Assistance-/raw/main/releases/ramya-ai-v1.0.1.apk)**
 
-#### Method 2: Local Wi-Fi / Hotspot Download
-If your phone is on the same Wi-Fi network as this computer:
-- Phone URL: `http://172.21.210.153:8888/ramya-ai-v1.0.0.apk`
-- Or open `http://172.21.210.153:8888/` on your computer and scan the QR code with your phone camera.
+📦 **[View GitHub Release v1.0.1](https://github.com/anjiduda77-afk/Ramya-AI-Personal-AI-Assistance-/releases/tag/v1.0.1)**
 
-#### Method 3: Direct USB Install (Instant)
+#### Method 2: Direct USB Install (Instant)
 Connect your phone with a USB cable (USB Debugging enabled) and run:
 ```powershell
-adb install -r "releases\ramya-ai-v1.0.0.apk"
+adb install -r "releases\ramya-ai-v1.0.1.apk"
 ```
 
 ---
